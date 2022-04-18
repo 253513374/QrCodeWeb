@@ -1,4 +1,5 @@
 ﻿using OpenCvSharp;
+using OpenCvSharp.Internal.Vectors;
 using QrCodeWeb.Controllers;
 using System;
 using System.Collections.Generic;
@@ -27,7 +28,7 @@ namespace QrCodeWeb.Services
             QRCodeDetector detector = new QRCodeDetector();
 
             // Mat mat =
-            OutputArray output = new Mat();
+            Mat output = new Mat();
             Mat image = Cv2.ImRead(code, ImreadModes.Grayscale); //CV_8UC3
             Point2f[] points;
             IEnumerable<Point2f> resultPoints = new List<Point2f>();
@@ -37,114 +38,139 @@ namespace QrCodeWeb.Services
             var resule = detector.DetectAndDecode(image, out points, output);
 
             FindContours(image, points);
-            SaveMatFile(output.GetMat());
+            SaveMatFile(output, "Detect");
             return "";
         }
 
         private Task FindContours(Mat srcmat, Point2f[] points)
         {
-            Mat result = new Mat();
+
+            Mat srcCopy = srcmat.Clone();
+            // Mat result = new Mat(srcmat, new Rect(0, 0, points.s, points.Height));
             // Rect2f rect2F = new Rect2f(points.);
 
-            HierarchyIndex[] hierarchy = new HierarchyIndex[0];
-            Point[][] contours = new Point[0][];
-            Cv2.FindContours(srcmat, out contours, out hierarchy, RetrievalModes.List, ContourApproximationModes.ApproxSimple);
+            // OutputArray<HierarchyIndex> hierarchy = new List<HierarchyIndex>();
+            HierarchyIndex[] hierarchy ;
+            Point[][] contours ;
 
-            Mat canvas = new Mat(srcmat.Size(), MatType.CV_8UC3, Scalar.All(255));
+            
+           // VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint();
 
+            //VectorOfVectorOfPointF VectorOfPointF = new VectorOfVectorOfPointF();
+
+
+            Cv2.FindContours(srcmat, out contours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+
+            Mat canvas = new Mat(srcmat.Size(), MatType.CV_8UC3, Scalar.All(0));
+
+           // Cv2.u
             //center_all获取特性中心
-            List<Point> center_all = new();
+            List<Point[]> center_Point = new List<Point[]>();
+            List<Point[]> contours2 = new List<Point[]>();
+            Mat drawing = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            Mat drawing2 = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            Mat drawingAllContours = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
 
+            List<Point> center_all = new List<Point>();
+
+            
             // 小方块的数量
             int numOfRec = 0;
-
             // 检测方块
             int ic = 0;
-            int parentIdx = -1;
+            int c = 0, k = 0, area = 0;
 
+            //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
+            int parentIdx = -1;
             for (int i = 0; i < contours.Length; i++)
             {
-                Vec4i vec4 = hierarchy[i].ToVec4i();
-                if (vec4[2] != -1 && ic == 0)
+               // var ArcLength = 0.02 * Cv2.ArcLength(contours2[0], true);
+                //画出所有轮廓图
+                Cv2.DrawContours(drawingAllContours, contours, parentIdx, new Scalar(255, 255, 255));
+                if (hierarchy[i].Child != -1 && ic == 0)
                 {
                     parentIdx = i;
                     ic++;
                 }
-                else if (vec4[2] != -1)
+                else if (hierarchy[i].Child != -1)
                 {
                     ic++;
                 }
-                else if (vec4[2] == -1)
+                else if (hierarchy[i].Child == -1)
                 {
-                    parentIdx = -1;
                     ic = 0;
+                    parentIdx = -1;
                 }
-                if (ic >= 2 && ic <= 2)
+
+                //有两个子轮廓
+                if (ic >= 2)
                 {
+                    //保存找到的三个黑色定位角
+                    var points2 = Cv2.ApproxPolyDP(contours[parentIdx], 20, true);
+                    if (points2.Length == 4)
+                    {
+                        center_Point.Add(points2);
+                    }
+                  
+                    //画出三个黑色定位角的轮廓
+                    Cv2.DrawContours(drawing, contours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                 
+
                     if (IsQrPoint(contours[parentIdx], srcmat))
                     {
-                        RotatedRect rectarea = Cv2.MinAreaRect(contours[parentIdx]);
+                        RotatedRect rectArea = Cv2.MinAreaRect(contours[parentIdx]);
 
-                        // 画图部分
-                        Point2f[] pointfs = new Point2f[4];
-                        pointfs = rectarea.Points();
-                        for (int j = 0; j < 4; j++)
-                        {
-                            Cv2.Line(srcmat, (int)points[j].X, (int)points[j].Y, (int)points[(j + 1) % 4].X, (int)points[(j + 1) % 4].Y, new Scalar(0, 255, 0), 2);
-                        }
+                      //  画图部分
+                       Point2f[] zpoints = new Point2f[4];
+                        zpoints = rectArea.Points();
+                        //for (int j = 0; j < 4; j++)
+                        //{
+                        //    line(src, points[j], points[(j + 1) % 4], Scalar(0, 255, 0), 2);
+                        //}
                         Cv2.DrawContours(canvas, contours, parentIdx, new Scalar(0, 0, 255), -1);
 
-                        // 如果满足条件则存入
-                        center_all.Add(rectarea.Center.ToPoint());
+
+                        //如果满足条件则存入
+                        center_all.Add(rectArea.Center.ToPoint());
                         numOfRec++;
                     }
                     ic = 0;
                     parentIdx = -1;
                 }
 
-                // Cv2.DrawContours(result, contours, i, Scalar.Red, 1, LineTypes.Link8, hierarchy,
-                // 0, new Point());
             }
 
-            // 连接三个正方形的部分
-            for (int i = 0; i < center_all.Count(); i++)
+            SaveMatFile(canvas, "canvas");
+
+            SaveMatFile(drawing, "drawing");
+
+           // IEnumerable<Point[]> points3 = new List<Point[]>();
+
+           // points3.a
+            //填充的方式画出三个黑色定位角的轮廓
+            for (int i = 0; i < center_Point.Count; i++)
             {
-                Cv2.Line(canvas, center_all[i], center_all[(i + 1) % center_all.Count()], new Scalar(255, 0, 0), 3);
+              Cv2.DrawContours(drawing2, center_Point, i, new Scalar(122, 222, 111), -1, LineTypes.Link4, hierarchy, 0, new Point());
             }
+            
+            SaveMatFile(drawing2, "drawing2");
+          
+
+            // 连接三个正方形的部分
+            //for (int i = 0; i < center_all.Count(); i++)
+            //{
+            //    Cv2.Line(canvas, center_all[i], center_all[(i + 1) % center_all.Count()], new Scalar(255, 0, 0), 3);
+            //}
 
             Point[][] contours3 = new Point[0][];
             Mat canvasGray = new Mat();
             Cv2.CvtColor(canvas, canvasGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
 
             Cv2.FindContours(canvasGray, out contours3, out hierarchy, RetrievalModes.List, ContourApproximationModes.ApproxSimple);
-            // Cv2.FindContours(canvasGray,out contours3, , RetrievalModes.External ,
-            // ContourApproximationModes.ApproxSimple );//CHAIN_APPROX_SIMPLE
 
-            Point[] maxContours;
+            Point[] maxContours = new Point[0];
             double maxArea = 0;
-            // 在原图中画出二维码的区域
-            for (int i = 0; i < contours3.Count(); i++)
-            {
-                RotatedRect MinArearect = Cv2.MinAreaRect(contours3[i]);
-                Point2f[] boxpoint = new Point2f[4];
-                boxpoint = MinArearect.Points();
 
-                for (int k = 0; k < 4; k++)
-                    Cv2.Line(srcmat, boxpoint[k].ToPoint(), boxpoint[(i + 1) % 4].ToPoint(), new Scalar(0, 0, 255), 3);
-
-                double area = Cv2.ContourArea(contours3[i]);
-                if (area > maxArea)
-                {
-                    maxContours = contours3[i];
-                    maxArea = area;
-                }
-            }
-            // imshow("src", src);
-            //if (numOfRec < 3)
-            //{
-            //waitKey(10);
-            //    continue;
-            //}
             // 计算“回”的次序关系
             int leftTopPointIndex = leftTopPoint(center_all.ToArray());
             int[] otherTwoPointIndex = otherTwoPoint(center_all.ToArray(), leftTopPointIndex);
@@ -158,15 +184,22 @@ namespace QrCodeWeb.Services
 
             // 拿出之前得到的最大的轮廓,重新
             RotatedRect rect = Cv2.MinAreaRect(maxContours);
+            
             Mat image = transformQRcode(srcCopy, rect, angle);
 
-            SaveMatFile(canvas);
+            SaveMatFile(image,"image");
 
             // 如果没有找到方块，则返回
             return Task.CompletedTask;
         }
 
-        // 该部分用于检测是否是角点，与下面两个函数配合
+        // 
+        /// <summary>
+        /// 该部分用于检测是否是角点，与下面两个函数配合/（判断面积，面积太小，返回false, 在获取最小区域） -- 可以放弃
+        /// </summary>
+        /// <param name="contour"></param>
+        /// <param name="img"></param>
+        /// <returns></returns>
         private bool IsQrPoint(Point[] contour, Mat img)
         {
             double area = Cv2.ContourArea(contour);
@@ -190,23 +223,23 @@ namespace QrCodeWeb.Services
             return false;
         }
 
-        // 用于判断是否属于角上的正方形
+        // 用于判断是否属于角上的正方形-- 可以放弃
         private bool isCorner(Mat image)
         {
             // 定义mask
             Mat imgCopy = new Mat();
             Mat dstCopy = new Mat();
-            Mat dstGray = new Mat();
+            Mat dstGray = image.Clone();
             imgCopy = image.Clone();
             // 转化为灰度图像
-            Cv2.CvtColor(image, dstGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
+           // Cv2.CvtColor(image, dstGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
             // 进行二值化
 
             Cv2.Threshold(dstGray, dstGray, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
             dstCopy = dstGray.Clone();  //备份
 
             // 找到轮廓与传递关系 vector<vector<Point>> contours;
-            Point[][] contours = new Point[0][];
+            Point[][] contours;
 
             HierarchyIndex[] hierarchy = new HierarchyIndex[0];
             Cv2.FindContours(dstCopy, out contours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
@@ -388,9 +421,9 @@ namespace QrCodeWeb.Services
             return roi;
         }
 
-        private Task SaveMatFile(Mat array)
+        private Task SaveMatFile(Mat array,string name)
         {
-            var filepath = Path.Combine(Environment.ContentRootPath, "QRCode.jpg");
+            var filepath = Path.Combine(Environment.ContentRootPath, $"{name}.jpg");
             // Mat image = array.GetMat();
 
             //ImageEncodingParam param = new ImageEncodingParam(ImageEncodingFlags.);
