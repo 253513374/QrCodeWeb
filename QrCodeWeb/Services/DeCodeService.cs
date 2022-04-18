@@ -156,7 +156,7 @@ namespace QrCodeWeb.Services
             // 计算旋转角
             double angle = rotateAngle(center_all[leftTopPointIndex], center_all[otherTwoPointIndex[0]], center_all[otherTwoPointIndex[1]]);
 
-            // 拿出之前得到的最大的轮廓
+            // 拿出之前得到的最大的轮廓,重新
             RotatedRect rect = Cv2.MinAreaRect(maxContours);
             Mat image = transformQRcode(srcCopy, rect, angle);
 
