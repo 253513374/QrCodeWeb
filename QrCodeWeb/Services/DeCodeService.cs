@@ -7,8 +7,10 @@ using System.Diagnostics.Metrics;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.Intrinsics;
+using System.Xml.Linq;
 using static System.Net.Mime.MediaTypeNames;
 using Point = OpenCvSharp.Point;
+using Size = OpenCvSharp.Size;
 
 namespace QrCodeWeb.Services
 {
@@ -27,53 +29,236 @@ namespace QrCodeWeb.Services
         {
             QRCodeDetector detector = new QRCodeDetector();
 
-            // Mat mat =
             Mat output = new Mat();
             Mat image = Cv2.ImRead(code, ImreadModes.Grayscale); //CV_8UC3
             Point2f[] points;
             IEnumerable<Point2f> resultPoints = new List<Point2f>();
-            detector.Detect(image, out points);
+            //detector.Detect(image, out points);
             // var de = detector.Decode(image, resultPoints);
 
             var resule = detector.DetectAndDecode(image, out points, output);
 
-            FindContours(image, points);
+            if (resule is "")
+            {
+                //解码失败
+                DetectAndDecodeFail(image);
+            }
+            else
+            {
+                //解码成功
+                RotatedRect rotatedRect = Cv2.MinAreaRect(points);
+                Mat mat = new Mat(image, rotatedRect.BoundingRect());
+                DetectAndDecodeOK(mat);
+            }
             SaveMatFile(output, "Detect");
             return "";
         }
 
-        private Task FindContours(Mat srcmat, Point2f[] points)
+        private Task DetectAndDecodeFail(Mat srcmat)
         {
+            Rect rect;
+            Mat areaRectMat = GetQrCodeMat(srcmat, out rect);
 
-            Mat srcCopy = srcmat.Clone();
-            // Mat result = new Mat(srcmat, new Rect(0, 0, points.s, points.Height));
-            // Rect2f rect2F = new Rect2f(points.);
+            ///重新计算截取的区域二维码定位点的坐标
+            List<Point[]> AllpatternsPoints;
+            List<Point> CenterPoints;
+            HierarchyIndex[] hierarchy2 = GetPosotionDetectionPatternsPoints(areaRectMat, out CenterPoints, out AllpatternsPoints);
 
-            // OutputArray<HierarchyIndex> hierarchy = new List<HierarchyIndex>();
-            HierarchyIndex[] hierarchy ;
-            Point[][] contours ;
+            Mat areaRectMatdrawing = Mat.Zeros(areaRectMat.Size(), MatType.CV_8UC1);
+            //填充的方式画出三个黑色定位角的轮廓
+            for (int i = 0; i < AllpatternsPoints.Count; i++)
+            {
+                Cv2.DrawContours(areaRectMat, AllpatternsPoints, i, new Scalar(122, 222, 111), -1, LineTypes.Link4, hierarchy2, 0, new Point());
+                Cv2.Line(areaRectMatdrawing, CenterPoints[i], CenterPoints[(i + 1) % CenterPoints.Count()], new Scalar(122, 222, 111), 3);
+            }
 
-            
-           // VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint();
+            SaveMatFile(areaRectMat, "areaRectMat2");
+            SaveMatFile(areaRectMatdrawing, "areaRectMatdrawing");
 
-            //VectorOfVectorOfPointF VectorOfPointF = new VectorOfVectorOfPointF();
+            /*以下代码只展示变换部分,其中ImageIn为输入图像,ImageOut为输出图像*/
+            //变换前的3点
+            var srcPoints = new Point2f[CenterPoints.Count];
+            var dstPoints = new Point2f[CenterPoints.Count];
+            for (int i = 0; i < CenterPoints.Count; i++)
+            {
+                srcPoints[i] = new Point2f(CenterPoints[i].X, CenterPoints[i].Y);
+                var p = CenterPoints[i];
+                if (i == 0)
+                {
+                    dstPoints[i] = new Point2f(0, 0);
+                }
+                if (i == 1)
+                {
+                    dstPoints[i] = new Point2f(rect.Width, 0);
+                }
+                if (i == 2)
+                {
+                    dstPoints[i] = new Point2f(0, rect.Width);
+                }
+            }
 
+            ////变换后的3点
+            //var dstPoints = new Point2f[] { new Point2f(CenterPoints[0].X, CenterPoints[0].Y),
+            //                                new Point2f(CenterPoints[1].X, CenterPoints[1].Y),
+            //                                new Point2f(CenterPoints[2].X, CenterPoints[2].Y),
+            //                                 };
 
-            Cv2.FindContours(srcmat, out contours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+            //var dstPoints2 = new Point2f[] { new Point2f(0, 0),
+            //                                new Point2f(0,rect1.Width),
+            //                                new Point2f(CenterPoints[2].X, CenterPoints[2].Y),
+            //                                 };
+            ////根据变换前后四个点坐标,获取变换矩阵
+            Mat mm = Cv2.GetAffineTransform(srcPoints, dstPoints);
+            Mat WarpPerspective = new Mat();
+            ////进行透视变换
+            Cv2.WarpAffine(areaRectMat, WarpPerspective, mm, areaRectMat.Size());
 
-            Mat canvas = new Mat(srcmat.Size(), MatType.CV_8UC3, Scalar.All(0));
+            SaveMatFile(WarpPerspective, "WarpPerspective1212123123");
+            //Mat AffineTransform = new Mat();
+            //InputArray M = Cv2.GetAffineTransform(CenterPoints.ToList(), AffineTransform);
 
-           // Cv2.u
-            //center_all获取特性中心
-            List<Point[]> center_Point = new List<Point[]>();
-            List<Point[]> contours2 = new List<Point[]>();
-            Mat drawing = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
-            Mat drawing2 = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
-            Mat drawingAllContours = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            // 连接三个正方形的部分
+            //for (int i = 0; i < center_all.Count(); i++)
+            //{
+            //    Cv2.Line(canvas, center_all[i], center_all[(i + 1) % center_all.Count()], new Scalar(255, 0, 0), 3);
+            //}
 
-            List<Point> center_all = new List<Point>();
+            // Point[][] contours3 = new Point[0][]; Mat canvasGray = new Mat();
+            // Cv2.CvtColor(canvas, canvasGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
 
-            
+            //Cv2.FindContours(canvasGray, out contours3, out hierarchy, RetrievalModes.List, ContourApproximationModes.ApproxSimple);
+
+            //Mat thresholdmat = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            //Mat src = new Mat(srcmat, rect1);
+            //Cv2.Threshold(src, thresholdmat, 128, 255, ThresholdTypes.BinaryInv);
+            //Mat element = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(15, 15)); //第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型的
+            //Mat matDilate = new Mat();
+            //Cv2.Dilate(thresholdmat, matDilate, element);
+
+            //SaveMatFile(matDilate, "matDilate");
+
+            //Point[][] maxContours;
+            //Point[] MaxAreaRectContours = new Point[1];
+
+            //double maxArea = 0;
+            //Cv2.FindContours(matDilate, out maxContours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+
+            //Mat matDilatess = Mat.Zeros(matDilate.Size(), MatType.CV_8UC3);
+            //for (int i = 0; i < maxContours.Length; i++)
+            //{
+            //    Cv2.DrawContours(matDilate, maxContours, i, new Scalar(255, 0, 0), -1, LineTypes.Link4, hierarchy, 0, new Point());
+
+            //    RotatedRect rotated = Cv2.MinAreaRect(maxContours[i]);
+            //    Point2f[] points;
+            //    points = rotated.Points();
+            //    for (int j = 0; j < 4; j++)
+            //    {
+            //        // var p = points[j].ToPoint();
+            //        Cv2.Line(matDilatess, points[j].ToPoint(), points[(j + 1) % 4].ToPoint(), new Scalar(0, 255, 0), 2);
+            //    }
+            //    var Area = Cv2.ContourArea(maxContours[i]);
+            //    if (Area > maxArea)
+            //    {
+            //        MaxAreaRectContours = maxContours[i];
+            //        maxArea = Area;
+            //    }
+            //}
+            //SaveMatFile(matDilate, "areaRectMatdrawing1");
+            //SaveMatFile(matDilatess, "areaRectMatdrawing2");
+            //确定那个定位点 在直角位置上
+            int leftTopPointIndex = leftTopPoint(CenterPoints.ToArray());
+
+            // 计算“回”定位点 的次序关系
+            int[] otherTwoPointIndex = otherTwoPoint(CenterPoints.ToArray(), leftTopPointIndex);
+
+            // canvas上标注三个“回”的次序关系
+            Cv2.Circle(areaRectMatdrawing, CenterPoints[leftTopPointIndex], 10, new Scalar(107, 142, 35), -1);
+            Cv2.Circle(areaRectMatdrawing, CenterPoints[otherTwoPointIndex[0]], 20, new Scalar(122, 255, 255), -1);
+            Cv2.Circle(areaRectMatdrawing, CenterPoints[otherTwoPointIndex[1]], 30, new Scalar(153, 50, 204), -1);
+
+            SaveMatFile(areaRectMatdrawing, "areaRectMatdrawing3");
+            // 计算旋转角
+            double angle = rotateAngle(CenterPoints[leftTopPointIndex], CenterPoints[otherTwoPointIndex[0]], CenterPoints[otherTwoPointIndex[1]]);
+
+            // 拿出之前得到的最大的轮廓,重新
+            //RotatedRect rect = Cv2.MinAreaRect(MaxAreaRectContours);
+
+            //Mat image = transformQRcode(areaRectMat, rect, angle);
+
+            //SaveMatFile(image, "image");
+
+            // 如果没有找到方块，则返回
+            return Task.CompletedTask;
+        }
+
+        private Mat GetQrCodeMat(Mat mat, out Rect rect)
+        {
+            Mat dilatemat = MatPreprocessing(mat.Clone());
+            SaveMatFile(dilatemat, "dilatemat");
+            //二维码的三个定位点
+            List<Point[]> centerPoint;
+            List<Point> centerall;
+            HierarchyIndex[] hierarchy = GetPosotionDetectionPatternsPoints(dilatemat, out centerall, out centerPoint);
+
+            rect = new Rect();
+            if (centerall is null || centerall.Count == 0) return new Mat();
+            //根据轮廓坐标 计算二维码位置
+            rect = GetQrCodeRect(centerPoint);
+            //根据位置截图二维码区域
+            return new Mat(dilatemat, rect);
+        }
+
+        private Task DetectAndDecodeOK(Mat srcmat)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// 图像预处理
+        /// </summary>
+        /// <param name="srcmat"></param>
+        /// <returns></returns>
+        private Mat MatPreprocessing(Mat srcmat)
+        {
+            Mat thresholdmat = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            Cv2.Threshold(srcmat, thresholdmat, 128, 255, ThresholdTypes.Binary);
+            SaveMatFile(thresholdmat, "thresholdmat");
+
+            Mat dilatemat = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            //第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型
+            Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
+
+            //对截取的图像进行闭运算，消除小型黑洞
+            Cv2.MorphologyEx(thresholdmat, dilatemat, MorphTypes.Dilate, element);
+            return dilatemat;
+        }
+
+        /// <summary>
+        /// 返回二维码定位点 <param name="dilatemat">需要解析的原图像MAT</param><param
+        /// name="CenterPoints">二维码定位点的中心坐标，一个轮廓一个中心坐标</param><param
+        /// name="PatternsPoints">二维码定位点的轮廓坐标集合 是一个二维码数组，返回的集合为所有轮廓的坐标</param>
+        /// </summary>
+        /// <param name="dilatemat">需要解析的原图像MAT</param>
+        /// <param name="CenterPoints">二维码定位点的中心坐标，一个轮廓一个中心坐标</param>
+        /// <param name="PatternsPoints">二维码定位点的轮廓坐标集合 是一个二维码数组，返回的集合为所有轮廓的坐标</param>
+        /// <returns></returns>
+        private HierarchyIndex[] GetPosotionDetectionPatternsPoints(Mat dilatemat, out List<Point> CenterPoints, out List<Point[]> PatternsPoints)
+        {
+            Point[][] rotatedcontours;
+            HierarchyIndex[] hierarchy;
+            ///算出二维码轮廓
+            Cv2.FindContours(dilatemat, out rotatedcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+
+            Mat canvas = new Mat(dilatemat.Size(), MatType.CV_8UC3, Scalar.All(0));
+
+            //二维码的三个定位点
+            PatternsPoints = new List<Point[]>();
+            //二维码的三个定位点的中心点
+            CenterPoints = new List<Point>();
+
+            Mat drawing = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+            Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+
             // 小方块的数量
             int numOfRec = 0;
             // 检测方块
@@ -82,11 +267,10 @@ namespace QrCodeWeb.Services
 
             //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
             int parentIdx = -1;
-            for (int i = 0; i < contours.Length; i++)
+            for (int i = 0; i < rotatedcontours.Length; i++)
             {
-               // var ArcLength = 0.02 * Cv2.ArcLength(contours2[0], true);
                 //画出所有轮廓图
-                Cv2.DrawContours(drawingAllContours, contours, parentIdx, new Scalar(255, 255, 255));
+                Cv2.DrawContours(drawingAllContours, rotatedcontours, parentIdx, new Scalar(255, 255, 255));
                 if (hierarchy[i].Child != -1 && ic == 0)
                 {
                     parentIdx = i;
@@ -101,99 +285,75 @@ namespace QrCodeWeb.Services
                     ic = 0;
                     parentIdx = -1;
                 }
-
                 //有两个子轮廓
                 if (ic >= 2)
                 {
                     //保存找到的三个黑色定位角
-                    var points2 = Cv2.ApproxPolyDP(contours[parentIdx], 20, true);
+                    var points2 = Cv2.ApproxPolyDP(rotatedcontours[parentIdx], 10, true);
                     if (points2.Length == 4)
                     {
-                        center_Point.Add(points2);
+                        PatternsPoints.Add(points2);
+                        RotatedRect rotated = Cv2.MinAreaRect(points2);
+                        CenterPoints.Add(rotated.Center.ToPoint());//获取轮廓的中心点
                     }
-                  
+
                     //画出三个黑色定位角的轮廓
-                    Cv2.DrawContours(drawing, contours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
-                 
-
-                    if (IsQrPoint(contours[parentIdx], srcmat))
-                    {
-                        RotatedRect rectArea = Cv2.MinAreaRect(contours[parentIdx]);
-
-                      //  画图部分
-                       Point2f[] zpoints = new Point2f[4];
-                        zpoints = rectArea.Points();
-                        //for (int j = 0; j < 4; j++)
-                        //{
-                        //    line(src, points[j], points[(j + 1) % 4], Scalar(0, 255, 0), 2);
-                        //}
-                        Cv2.DrawContours(canvas, contours, parentIdx, new Scalar(0, 0, 255), -1);
-
-
-                        //如果满足条件则存入
-                        center_all.Add(rectArea.Center.ToPoint());
-                        numOfRec++;
-                    }
+                    Cv2.DrawContours(drawing, rotatedcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
                     ic = 0;
                     parentIdx = -1;
                 }
-
             }
 
-            SaveMatFile(canvas, "canvas");
-
+            SaveMatFile(drawingAllContours, "drawingAllContours");
             SaveMatFile(drawing, "drawing");
-
-           // IEnumerable<Point[]> points3 = new List<Point[]>();
-
-           // points3.a
-            //填充的方式画出三个黑色定位角的轮廓
-            for (int i = 0; i < center_Point.Count; i++)
-            {
-              Cv2.DrawContours(drawing2, center_Point, i, new Scalar(122, 222, 111), -1, LineTypes.Link4, hierarchy, 0, new Point());
-            }
-            
-            SaveMatFile(drawing2, "drawing2");
-          
-
-            // 连接三个正方形的部分
-            //for (int i = 0; i < center_all.Count(); i++)
-            //{
-            //    Cv2.Line(canvas, center_all[i], center_all[(i + 1) % center_all.Count()], new Scalar(255, 0, 0), 3);
-            //}
-
-            Point[][] contours3 = new Point[0][];
-            Mat canvasGray = new Mat();
-            Cv2.CvtColor(canvas, canvasGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
-
-            Cv2.FindContours(canvasGray, out contours3, out hierarchy, RetrievalModes.List, ContourApproximationModes.ApproxSimple);
-
-            Point[] maxContours = new Point[0];
-            double maxArea = 0;
-
-            // 计算“回”的次序关系
-            int leftTopPointIndex = leftTopPoint(center_all.ToArray());
-            int[] otherTwoPointIndex = otherTwoPoint(center_all.ToArray(), leftTopPointIndex);
-            // canvas上标注三个“回”的次序关系
-            Cv2.Circle(canvas, center_all[leftTopPointIndex], 10, new Scalar(255, 0, 255), -1);
-            Cv2.Circle(canvas, center_all[otherTwoPointIndex[0]], 10, new Scalar(0, 255, 0), -1);
-            Cv2.Circle(canvas, center_all[otherTwoPointIndex[1]], 10, new Scalar(0, 255, 255), -1);
-
-            // 计算旋转角
-            double angle = rotateAngle(center_all[leftTopPointIndex], center_all[otherTwoPointIndex[0]], center_all[otherTwoPointIndex[1]]);
-
-            // 拿出之前得到的最大的轮廓,重新
-            RotatedRect rect = Cv2.MinAreaRect(maxContours);
-            
-            Mat image = transformQRcode(srcCopy, rect, angle);
-
-            SaveMatFile(image,"image");
-
-            // 如果没有找到方块，则返回
-            return Task.CompletedTask;
+            return hierarchy;
         }
 
-        // 
+        /// <summary>
+        /// 返回二维码区域Rect
+        /// </summary>
+        /// <param name="points"></param>
+        /// <returns></returns>
+        private Rect GetQrCodeRect(List<Point[]> points)
+        {
+            if (points is null) return new Rect();
+            Rect rect = new Rect();
+            var point1 = points[0][0];
+            var point2 = points[1][0];
+            var point3 = points[2][0];
+            int tempx = point1.X;
+            int tempy = point1.Y;
+            for (int i = 0; i < points.Count(); i++)
+            {
+                var point = points[i];
+                for (int k = 0; k < point.Length; k++)
+                {
+                    if (tempx > point[k].X)
+                    {
+                        tempx = point[k].X;
+                    }
+                    if (tempy > point[k].Y)
+                    {
+                        tempy = point[k].Y;
+                    }
+                }
+            }
+
+            var Width1 = Math.Sqrt(Math.Abs(point1.X - point2.X) * Math.Abs(point1.X - point2.X) + Math.Abs(point1.Y - point2.Y) * Math.Abs(point1.Y - point2.Y));
+            var Width2 = Math.Sqrt(Math.Abs(point1.X - point3.X) * Math.Abs(point1.X - point3.X) + Math.Abs(point1.Y - point3.Y) * Math.Abs(point1.Y - point3.Y));
+            var Width3 = Math.Sqrt(Math.Abs(point2.X - point3.X) * Math.Abs(point2.X - point3.X) + Math.Abs(point2.Y - point3.Y) * Math.Abs(point2.Y - point3.Y));
+
+            var maxWidth = Math.Max(Width1, Width2);
+            maxWidth = Math.Max(maxWidth, Width3);
+
+            rect.X = (int)(tempx - maxWidth / 3);
+            rect.Y = (int)(tempy - maxWidth / 3);
+            rect.Width = (int)(maxWidth + maxWidth);
+            rect.Height = (int)(maxWidth + maxWidth);
+
+            return rect;
+        }
+
         /// <summary>
         /// 该部分用于检测是否是角点，与下面两个函数配合/（判断面积，面积太小，返回false, 在获取最小区域） -- 可以放弃
         /// </summary>
@@ -231,9 +391,7 @@ namespace QrCodeWeb.Services
             Mat dstCopy = new Mat();
             Mat dstGray = image.Clone();
             imgCopy = image.Clone();
-            // 转化为灰度图像
-           // Cv2.CvtColor(image, dstGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY
-            // 进行二值化
+            // 转化为灰度图像 Cv2.CvtColor(image, dstGray, ColorConversionCodes.BGR2GRAY);//COLOR_BGR2GRAY 进行二值化
 
             Cv2.Threshold(dstGray, dstGray, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
             dstCopy = dstGray.Clone();  //备份
@@ -296,22 +454,25 @@ namespace QrCodeWeb.Services
         /// <returns></returns>
         private int leftTopPoint(Point[] centerPoint)
         {
+            Point p0 = centerPoint[0];
+            Point p1 = centerPoint[1];
+            Point p2 = centerPoint[2];
             int minIndex = 0;
             int multiple = 0;
             int minMultiple = 10000;
-            multiple = (centerPoint[1].X - centerPoint[0].X) * (centerPoint[2].X - centerPoint[0].X) + (centerPoint[1].Y - centerPoint[0].Y) * (centerPoint[2].Y - centerPoint[0].Y);
+            multiple = (p1.X - p0.X) * (p2.X - p0.X) + (p1.Y - p0.Y) * (p2.Y - p0.Y);
             if (minMultiple > multiple)
             {
                 minIndex = 0;
                 minMultiple = multiple;
             }
-            multiple = (centerPoint[0].X - centerPoint[1].X) * (centerPoint[2].X - centerPoint[1].X) + (centerPoint[0].Y - centerPoint[1].Y) * (centerPoint[2].Y - centerPoint[1].Y);
+            multiple = (p0.X - p1.X) * (p2.X - p1.X) + (p0.Y - p1.Y) * (p2.Y - p1.Y);
             if (minMultiple > multiple)
             {
                 minIndex = 1;
                 minMultiple = multiple;
             }
-            multiple = (centerPoint[0].X - centerPoint[2].X) * (centerPoint[1].X - centerPoint[2].X) + (centerPoint[0].Y - centerPoint[2].Y) * (centerPoint[1].Y - centerPoint[2].Y);
+            multiple = (p0.X - p2.X) * (p1.X - p2.X) + (p0.Y - p2.Y) * (p1.Y - p2.Y);
             if (minMultiple > multiple)
             {
                 minIndex = 2;
@@ -405,14 +566,17 @@ namespace QrCodeWeb.Services
                 contour[i] = points[i].ToPoint();
 
             //vector<vector<Point>> contours;
-            Point[][] contours = new Point[5][];
-            contours.Append(contour);
+            List<Point[]> contours = new List<Point[]>();
+            contours.Add(contour);
+
             // 再中介图像中画出轮廓
             Cv2.DrawContours(mask, contours, 0, new Scalar(255, 255, 255), -1);
-            // 通过mask掩膜将src中特定位置的像素拷贝到dst中。
+
+            // SaveMatFile(mask, "mask"); 通过mask掩膜将src中特定位置的像素拷贝到dst中。
             src.CopyTo(dst, mask);
             // 旋转
             Mat M = Cv2.GetRotationMatrix2D(center, angle, 1);
+
             Cv2.WarpAffine(dst, image, M, src.Size());
 
             // 截图
@@ -421,7 +585,7 @@ namespace QrCodeWeb.Services
             return roi;
         }
 
-        private Task SaveMatFile(Mat array,string name)
+        private Task SaveMatFile(Mat array, string name)
         {
             var filepath = Path.Combine(Environment.ContentRootPath, $"{name}.jpg");
             // Mat image = array.GetMat();

@@ -26,7 +26,7 @@ namespace QrCodeWeb.Controllers
         [HttpGet(Name = "DeCode")]
         public string DeCode(string code)
         {
-            var codepath = @"C:\Users\q4528\Desktop\QRCode\111111.png";
+            var codepath = @"D:\Desktop\QRCode\333333.jpg";
             CodeService.Decode(codepath);
             return "";
         }
