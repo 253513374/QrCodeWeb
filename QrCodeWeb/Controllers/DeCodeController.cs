@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using OpenCvSharp;
 using QrCodeWeb.Services;
+using System.Xml.Linq;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace QrCodeWeb.Controllers
@@ -11,11 +12,13 @@ namespace QrCodeWeb.Controllers
     {
         private DeCodeService CodeService { get; set; }
         private readonly ILogger<DeCodeController> Logger;
+        IWebHostEnvironment Environment { get; set; }
 
-        public DeCodeController(DeCodeService deCode, ILogger<DeCodeController> logger)
+        public DeCodeController(DeCodeService deCode, ILogger<DeCodeController> logger, IWebHostEnvironment environment)
         {
             CodeService = deCode;
             Logger = logger;
+            Environment = environment;
         }
 
         //public IActionResult Index()
@@ -26,7 +29,10 @@ namespace QrCodeWeb.Controllers
         [HttpGet(Name = "DeCode")]
         public string DeCode(string code)
         {
-            var codepath = @"D:\Desktop\QRCode\333333.jpg";
+
+            var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata");
+            var codepath = Path.Combine(filepathw, $"333333.jpg");
+           // var codepath = @"D:\Desktop\QRCode\333333.jpg";
             CodeService.Decode(codepath);
             return "";
         }
