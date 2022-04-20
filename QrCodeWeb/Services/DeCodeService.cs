@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using System.Drawing;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.Intrinsics;
+using System.Threading;
 using System.Xml.Linq;
 using static System.Net.Mime.MediaTypeNames;
 using Point = OpenCvSharp.Point;
@@ -30,7 +32,7 @@ namespace QrCodeWeb.Services
             QRCodeDetector detector = new QRCodeDetector();
 
             Mat output = new Mat();
-            Mat image = Cv2.ImRead(code, ImreadModes.Grayscale); //CV_8UC3
+            Mat image = Cv2.ImRead(code); //CV_8UC3
             Point2f[] points;
             IEnumerable<Point2f> resultPoints = new List<Point2f>();
             //detector.Detect(image, out points);
@@ -59,6 +61,8 @@ namespace QrCodeWeb.Services
             Rect rect;
             Mat areaRectMat = GetQrCodeMat(srcmat, out rect);
 
+            SaveMatFile(areaRectMat, "areaRectMat");
+
             ///重新计算截取的区域二维码定位点的坐标
             List<Point[]> AllpatternsPoints;
             List<Point> CenterPoints;
@@ -79,23 +83,23 @@ namespace QrCodeWeb.Services
             //变换前的3点
             var srcPoints = new Point2f[CenterPoints.Count];
             var dstPoints = new Point2f[CenterPoints.Count];
-            for (int i = 0; i < CenterPoints.Count; i++)
-            {
-                srcPoints[i] = new Point2f(CenterPoints[i].X, CenterPoints[i].Y);
-                var p = CenterPoints[i];
-                if (i == 0)
-                {
-                    dstPoints[i] = new Point2f(0, 0);
-                }
-                if (i == 1)
-                {
-                    dstPoints[i] = new Point2f(rect.Width, 0);
-                }
-                if (i == 2)
-                {
-                    dstPoints[i] = new Point2f(0, rect.Width);
-                }
-            }
+            //for (int i = 0; i < CenterPoints.Count; i++)
+            //{
+            //    srcPoints[i] = new Point2f(CenterPoints[i].X, CenterPoints[i].Y);
+            //    var p = CenterPoints[i];
+            //    if (i == 0)
+            //    {
+            //        dstPoints[i] = new Point2f(0, 0);
+            //    }
+            //    if (i == 1)
+            //    {
+            //        dstPoints[i] = new Point2f(rect.Width, 0);
+            //    }
+            //    if (i == 2)
+            //    {
+            //        dstPoints[i] = new Point2f(0, rect.Width);
+            //    }
+            //}
 
             ////变换后的3点
             //var dstPoints = new Point2f[] { new Point2f(CenterPoints[0].X, CenterPoints[0].Y),
@@ -191,21 +195,36 @@ namespace QrCodeWeb.Services
             return Task.CompletedTask;
         }
 
-        private Mat GetQrCodeMat(Mat mat, out Rect rect)
+        /// <summary>
+        /// 计算向量 两点之间的距离
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
+        private double Distance(Point2f a, Point2f b)
         {
-            Mat dilatemat = MatPreprocessing(mat.Clone());
-            SaveMatFile(dilatemat, "dilatemat");
+            var selfx = Math.Abs(a.X - b.X);
+            var selfy = Math.Abs(a.Y - b.Y);
+            var selflen = Math.Sqrt((selfx * selfx) + (selfy * selfy));
+            return selflen;
+        }
+
+        private Mat GetQrCodeMat(Mat mat, out Rect rotated)
+        {
+            Mat Preprocessing_mat = MatPreprocessing(mat.Clone());
+            // SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
+
             //二维码的三个定位点
             List<Point[]> centerPoint;
             List<Point> centerall;
-            HierarchyIndex[] hierarchy = GetPosotionDetectionPatternsPoints(dilatemat, out centerall, out centerPoint);
+            HierarchyIndex[] hierarchy = GetPosotionDetectionPatternsPoints(Preprocessing_mat, out centerall, out centerPoint);
 
-            rect = new Rect();
-            if (centerall is null || centerall.Count == 0) return new Mat();
             //根据轮廓坐标 计算二维码位置
-            rect = GetQrCodeRect(centerPoint);
+            rotated = GetQrCodeRect(centerall);
+            //Rect rect = rotated.BoundingRect();
             //根据位置截图二维码区域
-            return new Mat(dilatemat, rect);
+            SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
+            return new Mat(Preprocessing_mat, rotated);
         }
 
         private Task DetectAndDecodeOK(Mat srcmat)
@@ -220,17 +239,31 @@ namespace QrCodeWeb.Services
         /// <returns></returns>
         private Mat MatPreprocessing(Mat srcmat)
         {
-            Mat thresholdmat = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
-            Cv2.Threshold(srcmat, thresholdmat, 128, 255, ThresholdTypes.Binary);
-            SaveMatFile(thresholdmat, "thresholdmat");
+            Mat GRAY_mat = new Mat();
+            Mat Blur_mat = new Mat();
+            Mat ScaleAbs_mat = new Mat();
+            Cv2.CvtColor(srcmat, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
+            Cv2.Blur(GRAY_mat, Blur_mat, new Size(5, 5));//灰度图平滑处理
+            Cv2.ConvertScaleAbs(Blur_mat, ScaleAbs_mat, 2, 5);//图像增强对比度
 
-            Mat dilatemat = Mat.Zeros(srcmat.Size(), MatType.CV_8UC3);
+            SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat");
+
+            Mat Threshold_mat = new Mat();
+            Cv2.Threshold(ScaleAbs_mat, Threshold_mat, 128, 255, ThresholdTypes.Binary);
+            SaveMatFile(Threshold_mat, "Threshold_mat");
+            Cv2.Canny(ScaleAbs_mat, Threshold_mat, 100, 200);
+            Mat MorphologyEx_mat = new Mat();
             //第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型
             Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
 
             //对截取的图像进行闭运算，消除小型黑洞
-            Cv2.MorphologyEx(thresholdmat, dilatemat, MorphTypes.Dilate, element);
-            return dilatemat;
+            Cv2.MorphologyEx(Threshold_mat, MorphologyEx_mat, MorphTypes.Gradient, element);
+            SaveMatFile(MorphologyEx_mat, "MorphologyEx_mat");
+
+            //Cv2.MorphologyEx(Threshold_mat, MorphologyEx_mat, MorphTypes.Close, element);
+
+            //SaveMatFile(MorphologyEx_mat, "MorphologyEx_matClose");
+            return MorphologyEx_mat;
         }
 
         /// <summary>
@@ -244,12 +277,12 @@ namespace QrCodeWeb.Services
         /// <returns></returns>
         private HierarchyIndex[] GetPosotionDetectionPatternsPoints(Mat dilatemat, out List<Point> CenterPoints, out List<Point[]> PatternsPoints)
         {
-            Point[][] rotatedcontours;
+            Point[][] matcontours;
             HierarchyIndex[] hierarchy;
             ///算出二维码轮廓
-            Cv2.FindContours(dilatemat, out rotatedcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+            Cv2.FindContours(dilatemat, out matcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
 
-            Mat canvas = new Mat(dilatemat.Size(), MatType.CV_8UC3, Scalar.All(0));
+            // Mat canvas = new Mat();
 
             //二维码的三个定位点
             PatternsPoints = new List<Point[]>();
@@ -263,14 +296,16 @@ namespace QrCodeWeb.Services
             int numOfRec = 0;
             // 检测方块
             int ic = 0;
-            int c = 0, k = 0, area = 0;
+            int c = 0;
+            int k = 0;
+            int markWidth = 0;
 
             //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
             int parentIdx = -1;
-            for (int i = 0; i < rotatedcontours.Length; i++)
+            for (int i = 0; i < matcontours.Length; i++)
             {
                 //画出所有轮廓图
-                Cv2.DrawContours(drawingAllContours, rotatedcontours, parentIdx, new Scalar(255, 255, 255));
+                Cv2.DrawContours(drawingAllContours, matcontours, parentIdx, new Scalar(255, 255, 255));
                 if (hierarchy[i].Child != -1 && ic == 0)
                 {
                     parentIdx = i;
@@ -286,24 +321,21 @@ namespace QrCodeWeb.Services
                     parentIdx = -1;
                 }
                 //有两个子轮廓
-                if (ic >= 2)
+                if (ic >= 5)
                 {
                     //保存找到的三个黑色定位角
-                    var points2 = Cv2.ApproxPolyDP(rotatedcontours[parentIdx], 10, true);
+                    var points2 = Cv2.ApproxPolyDP(matcontours[parentIdx], 20, true);
                     if (points2.Length == 4)
                     {
                         PatternsPoints.Add(points2);
                         RotatedRect rotated = Cv2.MinAreaRect(points2);
-                        CenterPoints.Add(rotated.Center.ToPoint());//获取轮廓的中心点
+                        CenterPoints.Add(rotated.Center.ToPoint());//获取定位点轮廓的中心点
+                        markWidth = markWidth + (int)rotated.Size.Width;
                     }
-
                     //画出三个黑色定位角的轮廓
-                    Cv2.DrawContours(drawing, rotatedcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
-                    ic = 0;
-                    parentIdx = -1;
+                    Cv2.DrawContours(drawing, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
                 }
             }
-
             SaveMatFile(drawingAllContours, "drawingAllContours");
             SaveMatFile(drawing, "drawing");
             return hierarchy;
@@ -314,44 +346,126 @@ namespace QrCodeWeb.Services
         /// </summary>
         /// <param name="points"></param>
         /// <returns></returns>
-        private Rect GetQrCodeRect(List<Point[]> points)
+        private Rect GetQrCodeRect(List<Point> CenterPoints)
         {
-            if (points is null) return new Rect();
-            Rect rect = new Rect();
-            var point1 = points[0][0];
-            var point2 = points[1][0];
-            var point3 = points[2][0];
-            int tempx = point1.X;
-            int tempy = point1.Y;
-            for (int i = 0; i < points.Count(); i++)
+            //计算三个定位点的距离
+            int AB = (int)Distance(CenterPoints[0], CenterPoints[1]);
+            int BC = (int)Distance(CenterPoints[1], CenterPoints[2]);
+            int AC = (int)Distance(CenterPoints[0], CenterPoints[2]);
+            //计算二维码的中心坐标
+            int max = Math.Max(AB, Math.Max(BC, AC));
+            Point topPoint = new Point();
+            Point QRMatCenterPoint = new Point();
+            int selecttop = 0;
+            if (max == AB)
             {
-                var point = points[i];
-                for (int k = 0; k < point.Length; k++)
+                topPoint = CenterPoints[2];
+                selecttop = 2;
+                QRMatCenterPoint.X = (CenterPoints[0].X + CenterPoints[1].X) / 2;
+                QRMatCenterPoint.Y = (CenterPoints[0].Y + CenterPoints[1].Y) / 2;
+            }
+            else if (max == BC)
+            {
+                selecttop = 0;
+                topPoint = CenterPoints[0];
+                QRMatCenterPoint.X = (CenterPoints[1].X + CenterPoints[2].X) / 2;
+                QRMatCenterPoint.Y = (CenterPoints[1].Y + CenterPoints[2].Y) / 2;
+            }
+            else if (max == AC)
+            {
+                selecttop = 1;
+                topPoint = CenterPoints[1];
+                QRMatCenterPoint.X = (CenterPoints[0].X + CenterPoints[2].X) / 2;
+                QRMatCenterPoint.Y = (CenterPoints[0].Y + CenterPoints[2].Y) / 2;
+            }
+
+            //计算二维码矩形的第四个点
+            Point markPosotion = new Point();
+            if (QRMatCenterPoint.X < topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
+            {
+                markPosotion.X = QRMatCenterPoint.X + Math.Abs(QRMatCenterPoint.X - topPoint.X);
+                markPosotion.Y = QRMatCenterPoint.Y + Math.Abs(QRMatCenterPoint.Y - topPoint.Y);
+            }
+            else if (QRMatCenterPoint.X < topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
+            {
+                markPosotion.X = QRMatCenterPoint.X - Math.Abs(QRMatCenterPoint.X - topPoint.X);
+                markPosotion.Y = QRMatCenterPoint.Y + Math.Abs(QRMatCenterPoint.Y - topPoint.Y);
+            }
+            else if (QRMatCenterPoint.X < topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
+            {
+                markPosotion.X = QRMatCenterPoint.X - Math.Abs(QRMatCenterPoint.X - topPoint.X);
+                markPosotion.Y = QRMatCenterPoint.Y - Math.Abs(QRMatCenterPoint.Y - topPoint.Y);
+            }
+            else if (QRMatCenterPoint.X > topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
+            {
+                markPosotion.X = QRMatCenterPoint.X + Math.Abs(QRMatCenterPoint.X - topPoint.X);
+                markPosotion.Y = QRMatCenterPoint.Y - Math.Abs(QRMatCenterPoint.Y - topPoint.Y);
+            }
+            List<Point2f> RectPoints = new List<Point2f>();
+            foreach (var item in CenterPoints)
+            {
+                RectPoints.Add(item);
+            }
+            RectPoints.Add(markPosotion);
+            // 摘要: returns the minimal up-right rectangle containing the rotated rectangle
+            int Width1 = 0;
+            //int Width2 = (int)Distance(topPoint, CenterPoints[1]);
+            for (int i = 0; i < CenterPoints.Count; i++)
+            {
+                if (selecttop != i)
                 {
-                    if (tempx > point[k].X)
-                    {
-                        tempx = point[k].X;
-                    }
-                    if (tempy > point[k].Y)
-                    {
-                        tempy = point[k].Y;
-                    }
+                    Width1 = Width1 + (int)Distance(topPoint, CenterPoints[i]);
                 }
             }
 
-            var Width1 = Math.Sqrt(Math.Abs(point1.X - point2.X) * Math.Abs(point1.X - point2.X) + Math.Abs(point1.Y - point2.Y) * Math.Abs(point1.Y - point2.Y));
-            var Width2 = Math.Sqrt(Math.Abs(point1.X - point3.X) * Math.Abs(point1.X - point3.X) + Math.Abs(point1.Y - point3.Y) * Math.Abs(point1.Y - point3.Y));
-            var Width3 = Math.Sqrt(Math.Abs(point2.X - point3.X) * Math.Abs(point2.X - point3.X) + Math.Abs(point2.Y - point3.Y) * Math.Abs(point2.Y - point3.Y));
+            Point2f[] array = RectPoints.ToArray();
+            Rect rect = default(Rect);
+            rect.X = (int)Math.Floor(Math.Min(Math.Min(Math.Min(array[0].X, array[1].X), array[2].X), array[3].X));
+            rect.Y = (int)Math.Floor(Math.Min(Math.Min(Math.Min(array[0].Y, array[1].Y), array[2].Y), array[3].Y));
+            //rect.Width = (int)Math.Ceiling(Math.Max(Math.Max(Math.Max(array[0].X, array[1].X), array[2].X), array[3].X));
+            //rect.Height = (int)Math.Ceiling(Math.Max(Math.Max(Math.Max(array[0].Y, array[1].Y), array[2].Y), array[3].Y));
+            Rect result = rect;
+            result.Width = (int)Math.Abs(Width1 / 2) - 1;
+            result.Height = (int)Math.Abs(Width1 / 2) - 1; ;
+            return result;
 
-            var maxWidth = Math.Max(Width1, Width2);
-            maxWidth = Math.Max(maxWidth, Width3);
+            // RotatedRect rect = Cv2.MinAreaRect(RectPoints);
+            //if (points is null) return new Rect();
+            //Rect rect = new Rect();
+            //var point1 = points[0][0];
+            //var point2 = points[1][0];
+            //var point3 = points[2][0];
+            //int tempx = point1.X;
+            //int tempy = point1.Y;
+            //for (int i = 0; i < points.Count(); i++)
+            //{
+            //    var point = points[i];
+            //    for (int k = 0; k < point.Length; k++)
+            //    {
+            //        if (tempx > point[k].X)
+            //        {
+            //            tempx = point[k].X;
+            //        }
+            //        if (tempy > point[k].Y)
+            //        {
+            //            tempy = point[k].Y;
+            //        }
+            //    }
+            //}
 
-            rect.X = (int)(tempx - maxWidth / 3);
-            rect.Y = (int)(tempy - maxWidth / 3);
-            rect.Width = (int)(maxWidth + maxWidth);
-            rect.Height = (int)(maxWidth + maxWidth);
+            //var Width1 = Math.Sqrt(Math.Abs(point1.X - point2.X) * Math.Abs(point1.X - point2.X) + Math.Abs(point1.Y - point2.Y) * Math.Abs(point1.Y - point2.Y));
+            //var Width2 = Math.Sqrt(Math.Abs(point1.X - point3.X) * Math.Abs(point1.X - point3.X) + Math.Abs(point1.Y - point3.Y) * Math.Abs(point1.Y - point3.Y));
+            //var Width3 = Math.Sqrt(Math.Abs(point2.X - point3.X) * Math.Abs(point2.X - point3.X) + Math.Abs(point2.Y - point3.Y) * Math.Abs(point2.Y - point3.Y));
 
-            return rect;
+            //var maxWidth = Math.Max(Width1, Width2);
+            //maxWidth = Math.Max(maxWidth, Width3);
+
+            //rect.X = (int)(tempx - maxWidth / 3);
+            //rect.Y = (int)(tempy - maxWidth / 3);
+            //rect.Width = (int)(maxWidth + maxWidth);
+            //rect.Height = (int)(maxWidth + maxWidth);
+
+            // return rect;
         }
 
         /// <summary>
