@@ -28,33 +28,16 @@ namespace QrCodeWeb.Services
             Logger = logger;
         }
 
-        public string Decode(string code)
+        public async Task<string> Decode(string code)
         {
             QRCodeDetector detector = new QRCodeDetector();
 
             Mat output = new Mat();
             Mat image = Cv2.ImRead(code); //CV_8UC3
-            Point2f[] points;
-            IEnumerable<Point2f> resultPoints = new List<Point2f>();
-            //detector.Detect(image, out points);
-            // var de = detector.Decode(image, resultPoints);
 
-            var resule = detector.DetectAndDecode(image, out points, output);
+            await DetectAndDecodeFail(image);
 
-            if (resule is "")
-            {
-                //解码失败
-                DetectAndDecodeFail(image);
-            }
-            else
-            {
-                //解码成功
-                RotatedRect rotatedRect = Cv2.MinAreaRect(points);
-                Mat mat = new Mat(image, rotatedRect.BoundingRect());
-                DetectAndDecodeOK(mat);
-            }
-            SaveMatFile(output, "Detect");
-            return "";
+            return "数据解析成功";
         }
 
         private async Task<string> DetectAndDecodeFail(Mat srcmat)
