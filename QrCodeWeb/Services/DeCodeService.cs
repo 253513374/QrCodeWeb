@@ -42,11 +42,9 @@ namespace QrCodeWeb.Services
             //var wechatQrcode = WeChatQRCode.Create(_wechat_QCODE_detector_prototxt_path, _wechat_QCODE_detector_caffe_model_path,
             //                                             _wechat_QCODE_super_resolution_prototxt_path, _wechat_QCODE_super_resolution_caffe_model_path);
 
-            //var src = Cv2.ImRead(@"code", ImreadModes.Grayscale);
-
             //string[] texts;
             //Mat[] rects;
-            //wechatQrcode.DetectAndDecode(src, out rects, out texts);
+            //wechatQrcode.DetectAndDecode(img, out rects, out texts);
 
             // Mat detectormat = new Mat(); string decodestring = "";
 
@@ -112,10 +110,10 @@ namespace QrCodeWeb.Services
         public string DetectAndDecode(string code, ref ResponseModel response)
         {
             Mat image = Cv2.ImRead(code);
-
+            SaveMatFile(image, "原图");
+            
             Mat Preprocessing_mat = MatPreprocessing(image.Clone(), ref response);
             // SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
-
             //二维码的三个定位点
             List<RectPoints> rectPoints = new List<RectPoints>();
             GetPosotionDetectionPatternsPoints(Preprocessing_mat.Clone(), out rectPoints);
@@ -238,7 +236,7 @@ namespace QrCodeWeb.Services
             // Cv2.BilateralFilter(GRAY_mat, BilateralFilter, 5, 10, 2);
 
             // Cv2.GaussianBlur(GRAY_mat, Blur_mat, new Size(3, 3), 1);//灰度图平滑处理
-            Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 3, 7);//图像增强对比度
+            Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2, 7);//图像增强对比度
 
             SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat");
 
@@ -262,7 +260,7 @@ namespace QrCodeWeb.Services
             //SaveMatFile(Dilate_mat, "MorphologyEx_Dilate");
 
             using Mat Erode_mat = new Mat();
-            using Mat elemen3t = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(2, 2));
+            using Mat elemen3t = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
             Cv2.MorphologyEx(Close_mat, Erode_mat, MorphTypes.Erode, elemen3t);
             SaveMatFile(Erode_mat, "MorphologyEx_Erode");
 

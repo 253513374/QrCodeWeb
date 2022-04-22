@@ -11,7 +11,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.0" />
-    <PackageReference Include="OpenCvSharp4" Version="4.5.5.20211231" />
     <PackageReference Include="OpenCvSharp4.runtime.ubuntu.18.04-x64" Version="4.5.5.20211231" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.5.5.20211231" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.0" />
@@ -25,6 +24,15 @@
   <ItemGroup>
     <None Include="OpenCvSharpExtern\OpenCvSharpExtern.vcxproj" />
     <None Include="OpenCvSharpExtern\OpenCvSharpExtern.vcxproj.user" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="OpenCvSharp">
+      <HintPath>DLL\OpenCvSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenCvSharp.Extensions">
+      <HintPath>DLL\OpenCvSharp.Extensions.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
