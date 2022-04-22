@@ -28,19 +28,17 @@ namespace QrCodeWeb.Controllers
         //}
 
         [HttpGet(Name = "DeCode")]
-        public async Task<ResponseModel> DeCode()
+        public ResponseModel DeCode(string code)
         {
             var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata");
-            var codepath = Path.Combine(filepathw, $"1650190970148.jpg");
+            var codepath = Path.Combine(filepathw, $"{code}.jpg");
             //var codepath = Path.Combine(filepathw, $"333333.jpg");
-            var result = await CodeService.Decode(codepath);
+            CodeService.FileNmae = code;
 
-            return new ResponseModel()
-            {
-                Code = "",
-                Message = "数据成功解码",
-                Data = "任意数据"
-            };
+            ResponseModel response = new ResponseModel();
+            var result = CodeService.DetectAndDecode(codepath, ref response);
+
+            return response;
         }
     }
 }
