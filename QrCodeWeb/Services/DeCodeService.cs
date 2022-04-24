@@ -118,7 +118,7 @@ namespace QrCodeWeb.Services
             GetPosotionDetectionPatternsPoints(Preprocessing_mat.Clone(), out rectPoints);
             if (rectPoints.Count != 3)
             {
-                response.Code = "501";
+                response.Code = "503";
                 response.Message = "没有找到二维码";
                 Log.Information($"没有找到二维码");
                 return "";
@@ -137,13 +137,12 @@ namespace QrCodeWeb.Services
                 GetPosotionDetectionPatternsPoints(qrCodeAreaRectMatpre, out PatternsPoints);
                 if (PatternsPoints.Count < 3)
                 {
-                    response.Code = "502";
+                    response.Code = "504";
                     response.Message = "无法识别二维码";
                     Log.Information($"截取到的完整二维码无法识别");                    
                     return "";
                 }
-                response.Code = "200";
-                response.Message = "成功找到完整二维码定位点";
+               
                 Log.Information($"成功找到二维码定位点：坐标:{PatternsPoints[0].CenterPoints.X},{PatternsPoints[0].CenterPoints.Y}--{PatternsPoints[1].CenterPoints.X},{PatternsPoints[1].CenterPoints.Y}--{PatternsPoints[2].CenterPoints.X},{PatternsPoints[2].CenterPoints.Y}");
                 using Mat Patterns = GetPosotionDetectionPatternsMat(qrCodeAreaRectMat, PatternsPoints, moduleSize);
              
@@ -151,7 +150,8 @@ namespace QrCodeWeb.Services
                 response.MarkImgData = Base64ToMat.ToBase64(Patterns);
 
                 Log.Information($"二维码右上角定位点图片base64");
-
+                response.Code = "200";
+                response.Message = "成功找到二维码锯齿定位点";
                 SaveMatFile(Patterns, "Patterns");
             }
             // 如果没有找到方块，则返回
