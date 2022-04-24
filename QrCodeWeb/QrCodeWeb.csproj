@@ -1,38 +1,37 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>48852228-63f5-44b6-9b36-0697e7970282</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="OpenCvSharpExtern\**" />
+    <Content Remove="OpenCvSharpExtern\**" />
+    <EmbeddedResource Remove="OpenCvSharpExtern\**" />
+    <None Remove="OpenCvSharpExtern\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Hosting.WindowsServices" Version="6.0.4" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.0" />
-    <PackageReference Include="OpenCvSharp4.runtime.ubuntu.18.04-x64" Version="4.5.5.20211231" />
+    <PackageReference Include="OpenCvSharp4" Version="4.5.5.20211231" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.5.5.20211231" />
+    <PackageReference Include="Serilog" Version="2.11.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="5.0.0" />
+    <PackageReference Include="Serilog.Expressions" Version="3.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.0" />
+    <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.8" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Shareds\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="OpenCvSharpExtern\OpenCvSharpExtern.vcxproj" />
-    <None Include="OpenCvSharpExtern\OpenCvSharpExtern.vcxproj.user" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="OpenCvSharp">
-      <HintPath>DLL\OpenCvSharp.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenCvSharp.Extensions">
-      <HintPath>DLL\OpenCvSharp.Extensions.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>

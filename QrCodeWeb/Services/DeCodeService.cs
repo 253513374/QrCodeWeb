@@ -2,6 +2,7 @@
 using OpenCvSharp.Internal.Vectors;
 using QrCodeWeb.Controllers;
 using QrCodeWeb.Datas;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
@@ -10,6 +11,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.Intrinsics;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Xml.Linq;
 using ZXing;
@@ -107,11 +109,8 @@ namespace QrCodeWeb.Services
             return result;
         }
 
-        public string DetectAndDecode(string code, ref ResponseModel response)
+        public string DetectAndDecode(Mat image, ref ResponseModel response)
         {
-            Mat image = Cv2.ImRead(code);
-            SaveMatFile(image, "原图");
-            
             Mat Preprocessing_mat = MatPreprocessing(image.Clone(), ref response);
             // SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
             //二维码的三个定位点
@@ -119,8 +118,9 @@ namespace QrCodeWeb.Services
             GetPosotionDetectionPatternsPoints(Preprocessing_mat.Clone(), out rectPoints);
             if (rectPoints.Count != 3)
             {
-                response.Code = "-1";
+                response.Code = "501";
                 response.Message = "没有找到二维码";
+                Log.Information($"没有找到二维码");
                 return "";
             }
             if (rectPoints.Count == 3)
@@ -137,22 +137,23 @@ namespace QrCodeWeb.Services
                 GetPosotionDetectionPatternsPoints(qrCodeAreaRectMatpre, out PatternsPoints);
                 if (PatternsPoints.Count < 3)
                 {
-                    response.Code = "501";
+                    response.Code = "502";
                     response.Message = "无法识别二维码";
+                    Log.Information($"截取到的完整二维码无法识别");                    
                     return "";
                 }
                 response.Code = "200";
-                response.Message = "成功找到二维码";
+                response.Message = "成功找到完整二维码定位点";
+                Log.Information($"成功找到二维码定位点：坐标:{PatternsPoints[0].CenterPoints.X},{PatternsPoints[0].CenterPoints.Y}--{PatternsPoints[1].CenterPoints.X},{PatternsPoints[1].CenterPoints.Y}--{PatternsPoints[2].CenterPoints.X},{PatternsPoints[2].CenterPoints.Y}");
                 using Mat Patterns = GetPosotionDetectionPatternsMat(qrCodeAreaRectMat, PatternsPoints, moduleSize);
+             
+                
+                response.MarkImgData = Base64ToMat.ToBase64(Patterns);
+
+                Log.Information($"二维码右上角定位点图片base64");
+
                 SaveMatFile(Patterns, "Patterns");
             }
-
-            // Cv2.CvtColor(areaRectMat, areaRectMat, ColorConversionCodes.BGR2GRAY);
-
-            // Mat Patterns = GetPosotionDetectionPatternsMat(areaRectMat, moduleSize);
-
-            // SaveMatFile(Patterns, "Patterns");
-
             // 如果没有找到方块，则返回
             return "数据解码成功";
         }
@@ -188,7 +189,7 @@ namespace QrCodeWeb.Services
                 ModelLength = ModelLength + (int)Cv2.ArcLength(rectPoint.MarkPoints, true);
             }
             moduleSize = (int)((ModelLength / 3) / 28);
-
+            Logger.LogInformation($"计算二维码模块大小：{moduleSize}");
             var width = 0; //Preprocessing_mat.Width;
             //根据轮廓坐标 计算二维码位置
             Point[] src = GetQrCodePoints(rectPoints, out width, mat);
@@ -214,6 +215,7 @@ namespace QrCodeWeb.Services
             Mat dst = new Mat(rect.Size, MatType.CV_8UC3);
             Cv2.WarpPerspective(mat, dst, warpMatrix, dst.Size(), InterpolationFlags.Linear, BorderTypes.Constant);
 
+            Logger.LogInformation($"二维码透视变换完成：宽{width}，高{width}");
             //Rect rect = rotated.BoundingRect();
             //根据位置截图二维码区域
             SaveMatFile(dst, "WarpPerspective");
@@ -234,46 +236,69 @@ namespace QrCodeWeb.Services
             Cv2.CvtColor(srcmat, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
 
             // Cv2.BilateralFilter(GRAY_mat, BilateralFilter, 5, 10, 2);
-
             // Cv2.GaussianBlur(GRAY_mat, Blur_mat, new Size(3, 3), 1);//灰度图平滑处理
-            Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2, 7);//图像增强对比度
+            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 1.5, 5);//图像增强亮度
+            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat5");
+            Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2, 7);//
+            SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat7");
+            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2.5, 10);//
+            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat10");
+            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 3, 15);//
+            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat15");
 
-            SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat");
+            InputArray kernel2 = InputArray.Create<int>(new int[3, 3] { { 0, -1, 0 }, { -1, 5, -1 }, { 0, -1, 0 } });
+
+            using Mat filter2Dmat = new Mat();
+            Cv2.Filter2D(ScaleAbs_mat, filter2Dmat, MatType.CV_8UC1, kernel2, anchor: new Point(0, 0));
+            SaveMatFile(filter2Dmat, "filter2Dmat");
 
             Mat Threshold_mat = new Mat();
-            Cv2.Threshold(ScaleAbs_mat, Threshold_mat, 0, 255, ThresholdTypes.Otsu);
+            Cv2.Threshold(filter2Dmat, Threshold_mat, 0, 255, ThresholdTypes.Otsu);
             SaveMatFile(Threshold_mat, "Threshold_Binary");
+            //SaveMatFile(dst1, "Filter2D1");
+
+            Mat Erode_filter2Dmat = new Mat();
+            Mat elementDilate1 = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
+            Cv2.MorphologyEx(Threshold_mat, Erode_filter2Dmat, MorphTypes.Erode, elementDilate1);
+            SaveMatFile(Erode_filter2Dmat, "MorphologyEx_Dilate");
+
+
+            using Mat Close_mat = new Mat();
+            using Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(10, 10));
+            Cv2.MorphologyEx(Erode_filter2Dmat, Close_mat, MorphTypes.Close, elementClose);
+            SaveMatFile(Close_mat, "MorphologyEx_Close");
 
             if (isdecode)
             {
-                var code = Decode(Threshold_mat);
-                response.Data = code;
+                var code = Decode(Close_mat);
+
+                response.DeQRcodeContent = code;
             }
-            using Mat Close_mat = new Mat();
-            using Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(2, 2));
-            Cv2.MorphologyEx(Threshold_mat, Close_mat, MorphTypes.Close, elementClose);
-            SaveMatFile(Close_mat, "MorphologyEx_Close");
 
-            //Mat Dilate_mat = new Mat();
-            //Mat elementDilate = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(15, 15));
-            //Cv2.MorphologyEx(Close_mat, Dilate_mat, MorphTypes.Dilate, elementDilate);
-            //SaveMatFile(Dilate_mat, "MorphologyEx_Dilate");
-
-            using Mat Erode_mat = new Mat();
-            using Mat elemen3t = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
-            Cv2.MorphologyEx(Close_mat, Erode_mat, MorphTypes.Erode, elemen3t);
-            SaveMatFile(Erode_mat, "MorphologyEx_Erode");
-
-            //Cv2.Canny(ScaleAbs_mat, Threshold_mat, 80, 200);
             Mat MorphologyEx_mat = new Mat();
-            //第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型
+            ////第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型
+
+            ////对截取的图像进行闭运算，消除小型黑洞
             using Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
 
-            //对截取的图像进行闭运算，消除小型黑洞
-
-            Cv2.MorphologyEx(Erode_mat, MorphologyEx_mat, MorphTypes.Gradient, element);
+            Cv2.MorphologyEx(Close_mat, MorphologyEx_mat, MorphTypes.Gradient, element);
             SaveMatFile(MorphologyEx_mat, "MorphologyEx_Gradient");
 
+            return MorphologyEx_mat;//SetMorphologyEx(Erode_mat, ref response, isdecode);
+        }
+
+        private Mat SetMorphologyEx(Mat mat, ref ResponseModel response, bool isdecode = false)
+        {
+            if (isdecode)
+            {
+                var code = Decode(mat);
+                response.DeQRcodeContent = code;
+            }
+            using Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
+
+            Mat MorphologyEx_mat = new Mat();
+            Cv2.MorphologyEx(mat, MorphologyEx_mat, MorphTypes.Gradient, element);
+            SaveMatFile(MorphologyEx_mat, "MorphologyEx_Gradient");
             return MorphologyEx_mat;
         }
 
@@ -352,7 +377,6 @@ namespace QrCodeWeb.Services
         private Mat GetPosotionDetectionPatternsMat(Mat mat, List<RectPoints> rectPoints, int moduleSize)
         {
             var maxw = rectPoints.Max(w => w.CenterPoints.X);
-
             // var maxH = rectPoints.Max(w => w.CenterPoints.Y);
 
             var prect = rectPoints.FindLast(f => f.CenterPoints.X == maxw);
@@ -372,8 +396,10 @@ namespace QrCodeWeb.Services
 
             var w = (px * 11) > width ? width : (px * 11);
 
-            Rect rect = new Rect(x, y, w, w);//取得9个模块宽度
+            Rect rect = new Rect(x, y, w, w);//取得11个模块宽度
             Mat roi = new Mat(mat, rect);
+
+            Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
             return roi;
         }
 
@@ -384,7 +410,8 @@ namespace QrCodeWeb.Services
         /// <returns></returns>
         private Point[] GetQrCodePoints(List<RectPoints> rectPoints, out int wmax, Mat mat)
         {
-            //
+
+            Log.Information($"计算二维码边界坐标顺序：开始");            
             //var width = rectPoints.Max(x => x.MarkPoints[0].X);
             int a = 0, b = 1, c = 2, d = 3;
             //计算三个定位点的距离
@@ -588,24 +615,28 @@ namespace QrCodeWeb.Services
             //Mat dst = new Mat();
             //Cv2.WarpAffine(mat, dst, M, mat.Size(), InterpolationFlags.Cubic, BorderTypes.Replicate);
             //SaveMatFile(dst, "WarpAffine");
-
+            Log.Information($"计算二维码边界坐标顺序：完成，坐标顺序：{QRrect[0].X},{QRrect[0].Y};{QRrect[1].X},{QRrect[1].Y};{QRrect[2].X},{QRrect[2].Y};{QRrect[3].X},{QRrect[3].Y}");
             return QRrect;
         }
 
-        //private Mat GetThreshold(Mat mat)
-        //{
-        //}
+
 
         private Task SaveMatFile(Mat array, string name)
         {
-            var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata/{FileNmae}");
-
+            var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata");
             if (!Directory.Exists(filepathw))
             {
                 Directory.CreateDirectory(filepathw);
             }
 
-            var filepath = Path.Combine(filepathw, $"{FileNmaeIdnex}_{name}.jpg");
+            var filepathw2 = Path.Combine(filepathw, $"{FileNmae}");
+
+            if (!Directory.Exists(filepathw2))
+            {
+                Directory.CreateDirectory(filepathw2);
+            }
+
+            var filepath = Path.Combine(filepathw2, $"{FileNmaeIdnex}_{name}.jpg");
             // Mat image = array.GetMat();
 
             //ImageEncodingParam param = new ImageEncodingParam(ImageEncodingFlags.);
@@ -613,151 +644,6 @@ namespace QrCodeWeb.Services
 
             FileNmaeIdnex++;
             return Task.CompletedTask;
-        }
-    }
-
-    public class BarcodeReaderImage : BarcodeReader<Mat>, IBarcodeReaderImage
-    {
-        /// <summary>
-        /// define a custom function for creation of a luminance source with our specialized
-        /// Mat-supporting class
-        /// </summary>
-        private static readonly Func<Mat, LuminanceSource> defaultCreateLuminanceSource =
-           (image) => new ImageLuminanceSource(image);
-
-        /// <summary>
-        /// constructor which uses a custom luminance source with Mat support
-        /// </summary>
-        public BarcodeReaderImage()
-           : base(null, defaultCreateLuminanceSource, null)
-        {
-        }
-    }
-
-    internal interface IBarcodeReaderImage
-    {
-    }
-
-    /// <summary>
-    /// A luminance source class which consumes a Mat image from OpenCVSharp and calculates the
-    /// luminance values based on the bytes of the image
-    /// </summary>
-    internal class ImageLuminanceSource : BaseLuminanceSource
-    {
-        public ImageLuminanceSource(Mat image)
-           : base(image.Width, image.Height)
-        {
-            CalculateLuminance(image);
-        }
-
-        protected ImageLuminanceSource(byte[] luminances, int width, int height)
-           : base(luminances, width, height)
-        {
-        }
-
-        protected override LuminanceSource CreateLuminanceSource(byte[] newLuminances, int width, int height)
-        {
-            return new ImageLuminanceSource(newLuminances, width, height);
-        }
-
-        private void CalculateLuminance(Mat src)
-        {
-            if (src == null)
-                throw new ArgumentNullException("src");
-            if (src.Dims > 2)
-                throw new ArgumentException("Mat dimensions must be 2");
-
-            var pixelFormat = GetOptimumPixelFormats(src.Type());
-
-            if (src.IsSubmatrix())
-                throw new NotSupportedException("Submatrix");
-            //if (src.IsContinuous())
-            //   throw new NotSupportedException("Continuous");
-
-            unsafe
-            {
-                byte* pSrc = (byte*)(src.Data);
-                //int sstep = (int) src.Step();
-
-                switch (pixelFormat)
-                {
-                    case RGBLuminanceSource.BitmapFormat.Gray8:
-                        CalculateLuminanceGray8(pSrc, src.DataEnd.ToInt64() - src.DataStart.ToInt64());
-                        break;
-
-                    case RGBLuminanceSource.BitmapFormat.BGR24:
-                        CalculateLuminanceBGR24(pSrc, src.DataEnd.ToInt64() - src.DataStart.ToInt64());
-                        break;
-
-                    case RGBLuminanceSource.BitmapFormat.BGRA32:
-                        CalculateLuminanceBGRA32(pSrc, src.DataEnd.ToInt64() - src.DataStart.ToInt64());
-                        break;
-                }
-            }
-        }
-
-        private static RGBLuminanceSource.BitmapFormat GetOptimumPixelFormats(MatType type)
-        {
-            if (type == MatType.CV_8UC1 || type == MatType.CV_8SC1)
-                return RGBLuminanceSource.BitmapFormat.Gray8;
-            if (type == MatType.CV_8UC3 || type == MatType.CV_8SC3)
-                return RGBLuminanceSource.BitmapFormat.BGR24;
-            if (type == MatType.CV_8UC4 || type == MatType.CV_8SC4)
-                return RGBLuminanceSource.BitmapFormat.BGRA32;
-
-            //if (type == MatType.CV_16UC1 || type == MatType.CV_16SC1)
-            //   return RGBLuminanceSource.BitmapFormat.Gray16;
-            //if (type == MatType.CV_16UC3 || type == MatType.CV_16SC3)
-            //   return RGBLuminanceSource.BitmapFormat.Rgb48;
-            //if (type == MatType.CV_16UC4 || type == MatType.CV_16SC4)
-            //   return RGBLuminanceSource.BitmapFormat.Rgba64;
-
-            //if (type == MatType.CV_32SC4)
-            //   return RGBLuminanceSource.BitmapFormat.Prgba64;
-
-            //if (type == MatType.CV_32FC1)
-            //   return RGBLuminanceSource.BitmapFormat.Gray32Float;
-            //if (type == MatType.CV_32FC3)
-            //   return RGBLuminanceSource.BitmapFormat.Rgb128Float;
-            //if (type == MatType.CV_32FC4)
-            //   return RGBLuminanceSource.BitmapFormat.Rgba128Float;
-
-            throw new ArgumentOutOfRangeException(type.GetType().Name, "Not supported MatType");
-        }
-
-        private unsafe void CalculateLuminanceGray8(byte* rgbRawBytes, long length)
-        {
-            for (int index = 0, luminanceIndex = 0; index < length && luminanceIndex < luminances.Length; luminanceIndex++)
-            {
-                // MemCopy should be faster
-                luminances[luminanceIndex] = rgbRawBytes[index++];
-            }
-        }
-
-        private unsafe void CalculateLuminanceBGR24(byte* rgbRawBytes, long length)
-        {
-            for (int rgbIndex = 0, luminanceIndex = 0; rgbIndex < length && luminanceIndex < luminances.Length; luminanceIndex++)
-            {
-                // Calculate luminance cheaply, favoring green.
-                int b = rgbRawBytes[rgbIndex++];
-                int g = rgbRawBytes[rgbIndex++];
-                int r = rgbRawBytes[rgbIndex++];
-                luminances[luminanceIndex] = (byte)((RChannelWeight * r + GChannelWeight * g + BChannelWeight * b) >> ChannelWeight);
-            }
-        }
-
-        private unsafe void CalculateLuminanceBGRA32(byte* rgbRawBytes, long length)
-        {
-            for (int rgbIndex = 0, luminanceIndex = 0; rgbIndex < length && luminanceIndex < luminances.Length; luminanceIndex++)
-            {
-                // Calculate luminance cheaply, favoring green.
-                var b = rgbRawBytes[rgbIndex++];
-                var g = rgbRawBytes[rgbIndex++];
-                var r = rgbRawBytes[rgbIndex++];
-                var alpha = rgbRawBytes[rgbIndex++];
-                var luminance = (byte)((RChannelWeight * r + GChannelWeight * g + BChannelWeight * b) >> ChannelWeight);
-                luminances[luminanceIndex] = (byte)(((luminance * alpha) >> 8) + (255 * (255 - alpha) >> 8));
-            }
         }
     }
 }
