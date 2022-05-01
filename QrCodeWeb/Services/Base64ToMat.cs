@@ -8,21 +8,32 @@ namespace QrCodeWeb.Services
     {
         public static Mat ToaMat(string base64, ref ResponseModel response)
         {
-            base64 = base64.Replace(" ", "+");
-            base64 = base64.Trim().Substring(base64.IndexOf(",") + 1);   //将‘，’以前的多余字符串删除
-            MemoryStream stream = new MemoryStream(Convert.FromBase64String(base64));
+            try
+            {
+                base64 = base64.Replace(" ", "+");
+                base64 = base64.Trim().Substring(base64.IndexOf(",") + 1);   //将‘，’以前的多余字符串删除
+                                                                             // MemoryStream stream = new MemoryStream(Convert.FromBase64String(base64));
 
-            byte[] bytes = Convert.FromBase64String(base64);
+                byte[] bytes = Convert.FromBase64String(base64);
 
-            Mat m = Cv2.ImDecode(bytes, ImreadModes.Color);
+                Mat m = Cv2.ImDecode(bytes, ImreadModes.Color);
 
-            if (m.Empty())
+                if (m.Empty())
+                {
+                    response.Message = "base64解码失败";
+                    response.Code = "500";
+                }
+                // stream.Close();
+                return m;
+            }
+            catch (Exception)
             {
                 response.Message = "base64解码失败";
-                response.Code = "500";
+                response.Code = "50";
+                return new Mat();
+              //  throw;
             }
-            stream.Close();
-            return m;
+          
         }
 
         public static string ToBase64(Mat mat)

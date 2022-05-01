@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using System.Drawing;
+using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -39,80 +40,157 @@ namespace QrCodeWeb.Services
             Logger = logger;
         }
 
-        public string Decode(Mat img)
+        public string Decode(Mat src,out Mat dst)
         {
-            //var wechatQrcode = WeChatQRCode.Create(_wechat_QCODE_detector_prototxt_path, _wechat_QCODE_detector_caffe_model_path,
-            //                                             _wechat_QCODE_super_resolution_prototxt_path, _wechat_QCODE_super_resolution_caffe_model_path);
+            var wechatQrcode = WeChatQRCode.Create(_wechat_QCODE_detector_prototxt_path, _wechat_QCODE_detector_caffe_model_path,
+                                                         _wechat_QCODE_super_resolution_prototxt_path, _wechat_QCODE_super_resolution_caffe_model_path);
 
-            //string[] texts;
-            //Mat[] rects;
-            //wechatQrcode.DetectAndDecode(img, out rects, out texts);
+            string[] texts;
+            Mat[] rects;
+            wechatQrcode.DetectAndDecode(src, out rects, out texts);
 
-            // Mat detectormat = new Mat(); string decodestring = "";
+            // wechatQrcode.
+            if (texts.Length <= 0) {
+                dst = null;
+                return "";
+            }
+          
+            Mat drawingmark = src.Clone();
+            List<Point[]> lpoint = new();
+            //for (int i = 0; i < rects.Length; i++)
+            //{
+            var ss = rects[0];
+            OutputArray array = ss;
+            Point pt1 = new Point((int)ss.At<float>(0, 0), (int)ss.At<float>(0, 1));
+            Point pt2 = new Point((int)ss.At<float>(1, 0), (int)ss.At<float>(1, 1));
+            Point pt3 = new Point((int)ss.At<float>(2, 0), (int)ss.At<float>(2, 1));
+            Point pt4 = new Point((int)ss.At<float>(3, 0), (int)ss.At<float>(3, 1));
+            lpoint.Add(new Point[] { pt1, pt2, pt3, pt4 });
+            Cv2.DrawContours(drawingmark, lpoint.ToArray(), 0, new Scalar(0, 125, 255), 5, LineTypes.Link8);
 
-            // Mat src = new Mat(img, ImreadModes.Grayscale);
+            SaveMatFile(drawingmark, "二维码边界");
+                
+            RotatedRect rotatedRect = ss.MinAreaRect();
+            var center = rotatedRect.Center;
+            var size2F = rotatedRect.Size;
+            var MAX =  Math.Max(size2F.Width, size2F.Height);
+            var RoiSize = new Size(MAX+(MAX/2), MAX + (MAX / 2));
+            var RoiPoint = new Point(center.X - (MAX/2)-(MAX/4), center.Y - (MAX / 2) - (MAX / 4));
 
-            //Mat grad_x = new Mat();
-            //Mat grad_x2 = new Mat();
-            //Cv2.Sobel(img, grad_x, MatType.CV_16S, 1, 0);
-            //Cv2.ConvertScaleAbs(grad_x, grad_x2);
+            Rect rectroi = new Rect(RoiPoint, RoiSize);
+            dst = new Mat(src, rectroi);
+            //   warpAffine(dst, image, M, sz);
+            return texts[0];
+        }
 
-            //Mat grad_y = new Mat();
-            //Mat grad_y2 = new Mat();
-            //Cv2.Sobel(img, grad_y, MatType.CV_16S, 0, 1);
-            //Cv2.ConvertScaleAbs(grad_y, grad_y2);
 
-            //Mat resultm = new Mat();
-            //Cv2.AddWeighted(grad_x2, 0.5, grad_y2, 0.5, 0, resultm);
-            //// result.SaveImage(img_result);
+        private Mat WarpAffine( Mat roi)
+        {
 
-            //Mat result2 = new Mat();
-            //Mat result2Filter2D = new Mat();
-            //Cv2.Laplacian(resultm, result2, MatType.CV_16S, 3);
-            //Cv2.Filter2D(resultm, result2Filter2D, MatType.CV_16SC3, resultm);
-            //SaveMatFile(img, "解析原图");
-            //SaveMatFile(result2, "Laplacian解析处理图");
-            //SaveMatFile(result2Filter2D, "Filter2D解析处理图");
-            QRCodeDetector detector = new QRCodeDetector();
+            Mat src = roi.Clone();
 
-            Point2f[] pointfDetect;
-            var b = detector.Detect(img, out pointfDetect);
 
-            using Mat roi = new Mat();
-            Point2f[] pointf;
-            var result = detector.DetectAndDecode(img, out pointf, roi);
-            if (result != "" || result is null)
+            Mat GRAY_mat = new Mat();
+            Cv2.CvtColor(src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图            
+            Mat Threshold_mat = new Mat();
+            Cv2.Threshold(GRAY_mat, Threshold_mat, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
+
+            Mat elementDilate1 = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(25,25));
+            Mat Dilatedst = new Mat();
+            Cv2.Dilate(Threshold_mat, Dilatedst, elementDilate1);
+
+            SaveMatFile(Dilatedst, "二维码膨胀边界图像");
+            Dilatedst.FindContours(out var contours, out var hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            if (contours.Length <= 0)
             {
-                return result;
+                return null;
             }
 
-            // create a barcode reader instance
-            //IBarcodeReader reader = new BarcodeReader<Mat>();
-            BarcodeReader reader = new BarcodeReader();
+            List<Point> pts = new();
 
-            // load a bitmap var barcodeBitmap =
-            // (Bitmap)Image.LoadFrom("C:\\sample-barcode-image.png"); detect and decode the barcode
-            // inside the bitmap
-            var resultreader = reader.Decode(img);
-            // reader.Decode(img); do something with the result
-            if (resultreader != null)
+            double matarea = 0;
+            for (int i = 0; i < contours.Length; i++)
             {
-                return result = resultreader.Text;
-                // txtDecoderType.Text = result.BarcodeFormat.ToString();
-                //txtDecoderContent.Text = result.Text;
+                var area = Cv2.ContourArea(contours[i]);
+                if (area > 1000)
+                {
+                    // matarea = Math.Max(matarea, area);
+                    if (area > matarea)
+                    {
+                       // Cv2.ap
+                        matarea = area;
+                        pts = contours[i].ToList();
+
+                    }
+                }
             }
-            else
+            if (pts.Count <= 0) return null;
+
+             //= Cv2.ApproxPolyDP(pts.ToArray(), 0.035 * Cv2.ArcLength(pts.ToArray(), true), true);
+
+
+            const int whilwecount = 8;
+            int count = 0;
+            double x = 0.01;
+            Point[] tp = new Point[4];
+            while (count< whilwecount)
             {
-                result = "二维码解析失败";
+                var rectqq = Cv2.ApproxPolyDP(pts.ToArray(), x * Cv2.ArcLength(pts.ToArray(), true), true);
+                x = x + 0.05;
+                if (rectqq.Length == 4)
+                {
+                    tp = rectqq;
+                    break;
+                }
             }
 
-            return result;
+            using Mat mat = new Mat(src.Size(), MatType.CV_8UC1, new Scalar(0));
+            var pp= new List<Point[]>();
+            pp.Add(tp.ToArray());
+            mat.DrawContours(pp.ToArray(), -1, new Scalar(255), -1);
+            SaveMatFile(mat, "二维码膨胀边界图像轮廓");
+
+            for (int i = 0; i < tp.Length; i++)
+            {
+                //  Console.WriteLine(tp[i].X + "," + tp[i].Y);
+
+                src.PutText(i.ToString(),tp[i],HersheyFonts.HersheySimplex,2, new Scalar(255), 2);                
+                src.Line(tp[i], tp[(i + 1) % 4], new Scalar(255), 2);
+            }
+
+            SaveMatFile(src, "二维码位置图像轮廓");
+
+            var rect = Cv2.MinAreaRect(pts.ToArray());
+            var center = rect.Center;
+            var angle = rect.Angle;
+            var M = Cv2.GetRotationMatrix2D(center, angle, 1.0);
+            Mat dst = new Mat();
+            Cv2.WarpAffine(roi, dst, M, roi.Size());
+            return dst;
         }
 
         public string DetectAndDecode(Mat image, ref ResponseModel response)
         {
-            Mat Preprocessing_mat = MatPreprocessing(image.Clone(), ref response);
-            // SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
+           // Mat Preprocessing_mat = MatPreprocessing(image.Clone(), ref response,true);
+          //  SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
+
+            Mat SrcRoi = new Mat();
+            var code = Decode(image, out SrcRoi);
+            SaveMatFile(SrcRoi, "截取二维码区域");            
+            response.DeQRcodeContent = code;
+            if (code != null && code.Length == 0)
+            {
+                response.Message = "找不到二维码";
+                return null;
+            }
+
+            Mat warpaffinemat =  WarpAffine(SrcRoi.Clone());
+
+            SaveMatFile(warpaffinemat, "warpaffinemat");            
+
+            Mat Preprocessing_mat = MatPreprocessing(warpaffinemat.Clone(), ref response, true);
+            //SaveMatFile(Roi_MatPreprocessing, "Roi_MatPreprocessing");
             //二维码的三个定位点
             List<RectPoints> rectPoints = new List<RectPoints>();
             GetPosotionDetectionPatternsPoints(Preprocessing_mat.Clone(), out rectPoints);
@@ -127,11 +205,11 @@ namespace QrCodeWeb.Services
             {
                 //根据定位点获取完整二维码
                 int moduleSize = 0;
-                using Mat qrCodeAreaRectMat = GetQrCodeMat(image, rectPoints, out moduleSize);
+                using Mat qrCodeAreaRectMat = GetQrCodeMat(Preprocessing_mat, rectPoints, out moduleSize);
 
                 SaveMatFile(qrCodeAreaRectMat, "qrCodeAreaRectMat");
                 //对完整二维码重新处理
-                using Mat qrCodeAreaRectMatpre = MatPreprocessing(qrCodeAreaRectMat.Clone(), ref response, true);
+                using Mat qrCodeAreaRectMatpre = MatPreprocessing(qrCodeAreaRectMat.Clone(), ref response);
                 //二维码的三个定位点
                 List<RectPoints> PatternsPoints = new List<RectPoints>();
                 GetPosotionDetectionPatternsPoints(qrCodeAreaRectMatpre, out PatternsPoints);
@@ -228,72 +306,48 @@ namespace QrCodeWeb.Services
         /// </summary>
         /// <param name="srcmat">需要处理的图像</param>
         /// <returns></returns>
-        private Mat MatPreprocessing(Mat srcmat, ref ResponseModel response, bool isdecode = false)
+        private Mat MatPreprocessing(Mat src, ref ResponseModel response, bool isdecode = false)
         {
             using Mat GRAY_mat = new Mat();
-            //using Mat BilateralFilter = new Mat();
+            SaveMatFile(src, $"原图");
+            Cv2.CvtColor(src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
+
             using Mat ScaleAbs_mat = new Mat();
-            Cv2.CvtColor(srcmat, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
-
-            // Cv2.BilateralFilter(GRAY_mat, BilateralFilter, 5, 10, 2);
-            // Cv2.GaussianBlur(GRAY_mat, Blur_mat, new Size(3, 3), 1);//灰度图平滑处理
-            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 1.5, 5);//图像增强亮度
-            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat5");
-            Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2, 7);//
-            SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat7");
-            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2.5, 10);//
-            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat10");
-            //Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 3, 15);//
-            //SaveMatFile(ScaleAbs_mat, "ScaleAbs_mat15");
-
+            // Cv2.ConvertScaleAbs(GRAY_mat, ScaleAbs_mat, 2, 7);//
+            GRAY_mat.ConvertTo(ScaleAbs_mat, MatType.CV_8UC1, 2, 10);
+            SaveMatFile(ScaleAbs_mat, $"ScaleAbs_mat257");
             InputArray kernel2 = InputArray.Create<int>(new int[3, 3] { { 0, -1, 0 }, { -1, 5, -1 }, { 0, -1, 0 } });
-
             using Mat filter2Dmat = new Mat();
-            Cv2.Filter2D(ScaleAbs_mat, filter2Dmat, MatType.CV_8UC1, kernel2, anchor: new Point(0, 0));
-            SaveMatFile(filter2Dmat, "filter2Dmat");
+            Cv2.Filter2D(ScaleAbs_mat, filter2Dmat, MatType.CV_8UC1, kernel2, anchor: new Point(1, 1), delta: -100, borderType: BorderTypes.Constant);
+
+            SaveMatFile(filter2Dmat, $"filter2Dmat");
+            using Mat MedianBlur = new Mat();
+            Cv2.MedianBlur(filter2Dmat, MedianBlur, 11);
+            SaveMatFile(MedianBlur, $"MedianBlur");
+
 
             Mat Threshold_mat = new Mat();
-            Cv2.Threshold(filter2Dmat, Threshold_mat, 0, 255, ThresholdTypes.Otsu);
-            SaveMatFile(Threshold_mat, "Threshold_Binary");
-            //SaveMatFile(dst1, "Filter2D1");
+            // Cv2.Threshold(MedianBlur, Threshold_mat, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+            Cv2.AdaptiveThreshold(MedianBlur, Threshold_mat, 255, AdaptiveThresholdTypes.GaussianC, ThresholdTypes.Binary, 57, 2);
+            SaveMatFile(Threshold_mat, $"Threshold_Binary");
+
+
+            Mat elementDilate1 = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(3, 3));
+            Mat Dilatedst = new Mat();
+            Cv2.Dilate(Threshold_mat, Dilatedst, elementDilate1);
+            SaveMatFile(Dilatedst, $"Dilatedst");
+
 
             Mat Erode_filter2Dmat = new Mat();
-            Mat elementDilate1 = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
-            Cv2.MorphologyEx(Threshold_mat, Erode_filter2Dmat, MorphTypes.Erode, elementDilate1);
+            Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
+            Cv2.MorphologyEx(Dilatedst, Erode_filter2Dmat, MorphTypes.Close, elementClose);
             SaveMatFile(Erode_filter2Dmat, "MorphologyEx_Dilate");
-
-
-            using Mat Close_mat = new Mat();
-            using Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(10, 10));
-            Cv2.MorphologyEx(Erode_filter2Dmat, Close_mat, MorphTypes.Close, elementClose);
-            SaveMatFile(Close_mat, "MorphologyEx_Close");
-
-            if (isdecode)
-            {
-                var code = Decode(Close_mat);
-
-                response.DeQRcodeContent = code;
-            }
-
-            Mat MorphologyEx_mat = new Mat();
-            ////第一个参数MORPH_RECT表示矩形的卷积核，当然还可以选择椭圆形的、交叉型
-
-            ////对截取的图像进行闭运算，消除小型黑洞
-            using Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
-
-            Cv2.MorphologyEx(Close_mat, MorphologyEx_mat, MorphTypes.Gradient, element);
-            SaveMatFile(MorphologyEx_mat, "MorphologyEx_Gradient");
-
-            return MorphologyEx_mat;//SetMorphologyEx(Erode_mat, ref response, isdecode);
+            return Erode_filter2Dmat;
         }
 
         private Mat SetMorphologyEx(Mat mat, ref ResponseModel response, bool isdecode = false)
         {
-            if (isdecode)
-            {
-                var code = Decode(mat);
-                response.DeQRcodeContent = code;
-            }
+
             using Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
 
             Mat MorphologyEx_mat = new Mat();
@@ -319,13 +373,15 @@ namespace QrCodeWeb.Services
             Cv2.FindContours(dilatemat, out matcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
 
             using Mat drawingmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
-            using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+            //using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
             using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
             // 轮廓圈套层数
             rectPoints = new List<RectPoints>();
             //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
             int ic = 0;
             int parentIdx = -1;
+            float AngleCount = 0;
+            float angle = 0;
             for (int i = 0; i < matcontours.Length; i++)
             {
                 //画出所有轮廓图
@@ -345,30 +401,34 @@ namespace QrCodeWeb.Services
                     parentIdx = -1;
                 }
                 //有两个子轮廓
-                if (ic >= 5)
+                if (ic ==2)
                 {
                     //保存找到的三个黑色定位角
                     var points2 = Cv2.ApproxPolyDP(matcontours[parentIdx], 25, true);
                     if (points2.Length == 4)
                     {
-                        int ArcLength = (int)Cv2.ArcLength(matcontours[parentIdx], true);
+                        //  int ArcLength = (int)Cv2.ArcLength(matcontours[parentIdx], true);
                         RotatedRect rotated = Cv2.MinAreaRect(points2);
-                        var rects = new RectPoints()
+                        var w = rotated.Size.Width;
+                        var h = rotated.Size.Height;
+                        if (Math.Min(w, h) / Math.Max(w, h) > 0.7)
                         {
-                            CenterPoints = rotated.Center.ToPoint(),
-                            MarkPoints = points2,
-                            Angle = rotated.Angle
+                            AngleCount = AngleCount + 1.0f;
+                           // angle = angle+
+                            var rects = new RectPoints()
+                            {
+                                CenterPoints = rotated.Center.ToPoint(),
+                                MarkPoints = points2,
+                                Angle =rotated.Angle
                         };
-                        rectPoints.Add(rects);
-                        //画出三个黑色定位角的轮廓
-                        Cv2.DrawContours(drawingmark, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                            rectPoints.Add(rects);
+                            //画出三个黑色定位角的轮廓
+                            Cv2.DrawContours(drawingmark, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                        }
                     }
-                    //画出三个黑色定位角的轮廓
-                    Cv2.DrawContours(drawingAllmark, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
                 }
             }
             SaveMatFile(drawingmark, "drawingmark");
-            SaveMatFile(drawingAllmark, "drawingAllmark");
             SaveMatFile(drawingAllContours, "drawingAllContours");
 
             return Task.CompletedTask;
@@ -621,7 +681,7 @@ namespace QrCodeWeb.Services
 
 
 
-        private Task SaveMatFile(Mat array, string name)
+        private Task SaveMatFile(Mat array, string name,string s="")
         {
             var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata");
             if (!Directory.Exists(filepathw))

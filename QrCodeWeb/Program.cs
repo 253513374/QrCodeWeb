@@ -2,7 +2,10 @@ using QrCodeWeb.Services;
 using Serilog;
 using Microsoft.AspNetCore.Hosting.Server;
 
-Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
+Log.Logger = new LoggerConfiguration()
+   
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
 Log.Information("Serilog 日志记录启动成功");
 
