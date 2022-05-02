@@ -59,8 +59,8 @@ async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
 {
 
     Mat GRAY_mat = src.Clone();
-   // Cv2.CvtColor(src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
-    
+    // Cv2.CvtColor(src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
+
     // using Mat ScaleAbs_mat = new Mat();
     // GRAY_mat.ConvertTo(GRAY_mat, MatType.CV_8UC1, 2, 7);
     //using Mat mat = new Mat();
@@ -93,15 +93,22 @@ async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
     //Mat Erode = new Mat();
     //Cv2.Erode(GRAY_mat, Erode, elementErode);
 
+    int moduleSzie = (int)((GRAY_mat.Width / 31)/2);
+
+    Mat MorphologyEx_Open = new Mat();
+    Mat elementOpen = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
+    Cv2.MorphologyEx(GRAY_mat, MorphologyEx_Open, MorphTypes.Dilate, elementOpen);
+    SaveMatFile(MorphologyEx_Open, "MorphologyEx_Open", filename);
+
     Mat MorphologyEx_Close = new Mat();
-    Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Cross, new Size(5, 5));
-    Cv2.MorphologyEx(GRAY_mat, MorphologyEx_Close, MorphTypes.Close, elementClose);
-     SaveMatFile(MorphologyEx_Close, "MorphologyEx_Close", filename);
+    Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
+    Cv2.MorphologyEx(MorphologyEx_Open, MorphologyEx_Close, MorphTypes.Erode, elementClose);
+    SaveMatFile(MorphologyEx_Close, "MorphologyEx_Close", filename);
 
     //Mat Gradient = new Mat();
-    //Mat elementGradient = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(5, 5));
-    //Cv2.MorphologyEx(Erode_filter2Dmat, Gradient, MorphTypes.Gradient, elementClose);
-    //SaveMatFile(Gradient, "elementGradient", filename);    
+    //Mat elementGradient = Cv2.GetStructuringElement(MorphShapes.Cross, new Size(5, 5));
+    //Cv2.MorphologyEx(MorphologyEx_Close, Gradient, MorphTypes.Gradient, elementClose);
+    //SaveMatFile(Gradient, "elementGradient", filename);
     List<RectPoints> rectPoints = GetPosotionDetectionPatternsPoints(MorphologyEx_Close, filename);
 
     return rectPoints;
@@ -133,14 +140,7 @@ Task GetFiles(string path, ref List<string> files)
     }
     return Task.CompletedTask;
 }
-//{
-//    var files = Directory.GetFiles(path);
-//    foreach (var file in files)
-//    {
-//        Console.WriteLine(file);
-//    }
-//    return Task.CompletedTask;
-//}
+
 Mat WarpAffine(Mat roi,string filename)
 {
     Mat src = roi.Clone();
@@ -234,10 +234,14 @@ Mat WarpAffine(Mat roi,string filename)
     }
     SaveMatFile(drawsrc, "圈定的二维码边界", filename);
 
+    using Mat MedianBlur = new Mat();
+    Cv2.MedianBlur(GRAY_mat, MedianBlur, 11);
+    SaveMatFile(MedianBlur, "MedianBlur", filename);
+
     Mat srthreshold = new Mat();
     //  Cv2.Threshold(MedianBlur, Threshold_mat, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
     // SaveMatFile(Threshold_mat, $"Threshold_Binary", filename);
-    Cv2.AdaptiveThreshold(GRAY_mat, srthreshold, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 57, 2);
+    Cv2.AdaptiveThreshold(MedianBlur, srthreshold, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 101, 2);
 
     SaveMatFile(srthreshold, "圈定的二维码边界二值化", filename);
 
@@ -303,82 +307,118 @@ Task SaveMatFile(Mat array, string name,string FileNmae,int i=0)
 
 List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
 {
-
-    List<RectPoints> rectPoints = new List<RectPoints>();
-    Point[][] matcontours;
-    HierarchyIndex[] hierarchy;
-    ///算出二维码轮廓
-    Cv2.FindContours(dilatemat, out matcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
-
-    using Mat drawingmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
-    using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
-    using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
-    // 轮廓圈套层数
-    rectPoints = new List<RectPoints>();
-    //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
-    int ic = 0;
-    int parentIdx = -1;
-    for (int i = 0; i < matcontours.Length; i++)
+    try
     {
-        //画出所有轮廓图
-        Cv2.DrawContours(drawingAllContours, matcontours, parentIdx, new Scalar(255, 255, 255));
+        List<RectPoints> rectPoints = new List<RectPoints>();
+        Point[][] matcontours;
+        HierarchyIndex[] hierarchy;
+        ///算出二维码轮廓
+        Cv2.FindContours(dilatemat, out matcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
 
-        if (hierarchy[i].Child != -1 && ic == 0)
+        using Mat drawingmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+        using Mat drawingmarkminAreaSzie = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);        
+        using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+        using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+        // 轮廓圈套层数
+        rectPoints = new List<RectPoints>();
+
+        double moduleSzie = dilatemat.Width / 31;
+        double minAreaSzie = (moduleSzie* 4)* (moduleSzie *4);
+        double maxAreaSzie = (moduleSzie * 10) * (moduleSzie * 10);
+        //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
+        int ic = 0;
+        int parentIdx = -1;
+        for (int i = 0; i < matcontours.Length; i++)
         {
-            parentIdx = i;
-            ic++;
-        }
-        else if (hierarchy[i].Child != -1)
-        {
-            ic++;
-        }
-        else if (hierarchy[i].Child == -1)
-        {
-            ic = 0;
-            parentIdx = -1;
-        }
-        //有两个子轮廓
-        if (ic >=2)
-        {
-           // 保存找到的三个黑色定位角
-           // double wcount = 0.05;
-           // double x = 0.01;
-           // while (x< wcount)
-           // {
-           // x = x + 0.005;
-                var points2 = Cv2.ApproxPolyDP(matcontours[parentIdx], 35, true);//Cv2.ApproxPolyDP(matcontours[parentIdx], x * Cv2.ArcLength(matcontours[parentIdx].ToArray(), true), true);// 
+            //int ic = 0;
+            //int childIdx = i;
+            //while (hierarchy[childIdx].Child != -1)
+            //{
+            //    childIdx = hierarchy[childIdx].Child;
+            //    ic = ic + 1;
+            //}
+            //if (hierarchy[childIdx].Child != -1)
+            //{
+            //    ic = ic + 1;
+            //}
+            #region
+
+            if (hierarchy[i].Child != -1 && ic == 0)
+            {
+                parentIdx = i;
+                ic++;
+            }
+            else if (hierarchy[i].Child != -1)
+            {
+                ic++;
+            }
+            else if (hierarchy[i].Child == -1)
+            {
+                ic = 0;
+                parentIdx = -1;
+            }
+            #endregion
+            //有两个子轮廓
+            if (ic >= 2)
+            {
+                //画出所有轮廓图
+                Cv2.DrawContours(drawingAllContours, matcontours, i, new Scalar(255, 255, 255));
+                SaveMatFile(drawingAllContours, "所有轮廓", name);
+
+                // 保存找到的三个黑色定位角
+                var points2 = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
+
                 if (points2.Length == 4)
                 {
-
-                    //  int ArcLength = (int)Cv2.ArcLength(matcontours[parentIdx], true);
-                    RotatedRect rotated = Cv2.MinAreaRect(points2);
-                    var w = rotated.Size.Width;
-                    var h = rotated.Size.Height;
-                    if (Math.Min(w, h) / Math.Max(w, h) > 0.8)
+                    if(name== "1650182312378")
                     {
-                        var rects = new RectPoints()
-                        {
-                            CenterPoints = rotated.Center.ToPoint(),
-                            MarkPoints = points2,
-                            Angle = rotated.Angle
-                        };
-                        rectPoints.Add(rects);
-                        //画出三个黑色定位角的轮廓
-                        Cv2.DrawContours(drawingmark, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                        int s = 0;
                     }
-                  //  break;
+                    var  area = (int)Cv2.ContourArea(matcontours[i], false);
+                    if (area > minAreaSzie && area<maxAreaSzie)
+                    {
+                        RotatedRect rotated = Cv2.MinAreaRect(points2);
+                        var w = rotated.Size.Width;
+                        var h = rotated.Size.Height;
+                        if (Math.Min(w, h) / Math.Max(w, h) > 0.7)
+                        {
+                            var rects = new RectPoints()
+                            {
+                                CenterPoints = rotated.Center.ToPoint(),
+                                MarkPoints = points2,
+                                Angle = rotated.Angle
+                            };
+                            //rectPoints.FindLast(x => x.CenterPoints == rects.CenterPoints).MarkPoints = points2;
+                            rectPoints.Add(rects);
+                            //画出三个黑色定位角的轮廓
+                            Cv2.DrawContours(drawingmark, matcontours, i, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                            SaveMatFile(drawingmark, "三个定位点轮廓", name);
+                        }
+                    }
+                    else
+                    {
+                        Cv2.DrawContours(drawingmarkminAreaSzie, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                        SaveMatFile(drawingmarkminAreaSzie, "三个定位点轮廓_小于指定面积", name);
+                    }
                 }
-              
-           // }
-           
-          
-        }
-        
-    }
-    SaveMatFile(drawingmark, "三个定位点轮廓",name);
-    SaveMatFile(drawingAllContours, "所有轮廓",name);
+                ic = 0;
+                parentIdx = -1;
 
-    return rectPoints;
+            }
+
+        }
+     
+      
+     
+
+        return rectPoints;
+    }
+    catch (Exception ee)
+    {
+        return new List<RectPoints>();
+       // throw;
+    }
+  
 }
 
 
