@@ -37,6 +37,8 @@ namespace QrCodeWeb.Controllers
         [HttpPost(Name = "DeCode")]
         public ResponseModel DeCode([FromBody] string code)
         {
+
+            DateTime startTime = DateTime.Now;// - new DateTime(1970, 1, 1, 0, 0, 0, 0);
             try
             {
                 ResponseModel response = new ResponseModel();
@@ -64,9 +66,11 @@ namespace QrCodeWeb.Controllers
 
                 CodeService.FileNmae = "inimges";
 
-                var result = CodeService.DetectAndDecode(mat, ref response);
+                CodeService.DetectAndDecode(mat, ref response);
                 // response.DeQRcodeContent = code;
+                TimeSpan span = DateTime.Now - startTime;
 
+                response.DateTime = $"{(int)span.TotalMilliseconds}";
                 return response;
             }
             catch (Exception e)
