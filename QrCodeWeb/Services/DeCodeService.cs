@@ -219,9 +219,6 @@ namespace QrCodeWeb.Services
 
         public Task DetectAndDecode(Mat image, ref ResponseModel response)
         {
-           // Mat Preprocessing_mat = MatPreprocessing(image.Clone(), ref response,true);
-          //  SaveMatFile(Preprocessing_mat, "Preprocessing_mat");
-
             Mat SrcRoi = new Mat();
             var code = Decode(image, out SrcRoi);
             SaveMatFile(SrcRoi, "截取二维码区域");            
@@ -256,26 +253,19 @@ namespace QrCodeWeb.Services
             Cv2.WarpAffine(warpaffinemat, dst, m, dst.Size());
             SaveMatFile(dst, $"矫正之后的原图");
 
-        ///获取指定的识别定位点
-        ///
-
-            //根据定位点获取完整二维码
-            int moduleSize = 0;
-            // using Mat qrCodeAreaRectMat = GetQrCodeMat(Preprocessing_mat, rectPoints, out moduleSize);
-
-          //  Log.Information($"成功找到二维码3个定位点，坐标：{rectPoints[0].CenterPoints.X}");   
+            //获取指定的识别定位点
             Log.Information($"成功找到二维码3个定位点：坐标:{PatternsPoints[0].CenterPoints.X},{PatternsPoints[0].CenterPoints.Y}--{PatternsPoints[1].CenterPoints.X},{PatternsPoints[1].CenterPoints.Y}--{PatternsPoints[2].CenterPoints.X},{PatternsPoints[2].CenterPoints.Y}");
             using Mat Patterns = GetPosotionDetectionPatternsMat(dst, PatternsPoints);
              
-                
+            //图像转Base64编码    
             response.MarkImgData = Base64ToMat.ToBase64(Patterns);
-
-            Log.Information($"二维码右上角定位点图片base64");
             response.Code = "200";
             response.Message = "成功找到二维码锯齿定位点";
+
+            Log.Information($"返回二维码右上角定位点图片base64");
             SaveMatFile(Patterns, "Patterns");
             
-            // 如果没有找到方块，则返回
+            //如果没有找到方块，则返回
             return Task.CompletedTask;
         }
 
@@ -353,7 +343,7 @@ namespace QrCodeWeb.Services
         }
 
 
-     
+
         List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat, string name="")
         {
             try
@@ -368,12 +358,15 @@ namespace QrCodeWeb.Services
                 using Mat drawingmarkminAreaSzie = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
                 using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
                 using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+
+                using Mat drawing = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+                using Mat drawingf = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
                 // 轮廓圈套层数
                 rectPoints = new List<RectPoints>();
 
                 double moduleSzie = dilatemat.Width / 31;
                 double minAreaSzie = (moduleSzie * 4) * (moduleSzie * 4);
-                double maxAreaSzie = (moduleSzie * 10) * (moduleSzie * 10);
+                double maxAreaSzie = (moduleSzie * 12) * (moduleSzie * 12);
                 //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
                 int ic = 0;
                 int parentIdx = -1;
@@ -390,8 +383,25 @@ namespace QrCodeWeb.Services
                     //{
                     //    ic = ic + 1;
                     //}
-                    #region
+                    var area2 = (int)Cv2.ContourArea(matcontours[i], false);
+                    if (area2 <= minAreaSzie || area2 >= maxAreaSzie) { continue; }
+
+                    var approxPolyDP = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
+
+                    if (approxPolyDP.Length != 4)
+                    {
+                        //Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                        //SaveMatFile(drawing, "无法逼近的轮廓", name);
+                        continue;
+                    }
+
+                    //if (approxPolyDP.Length == 4) {
+                    //    Cv2.DrawContours(drawingf, matcontours, i, new Scalar(255, 255, 255));
+                    //    SaveMatFile(drawingf, "逼近4的轮廓", name);
+                    //}
                     Cv2.DrawContours(drawingAllContours, matcontours, i, new Scalar(255, 255, 255));
+                    SaveMatFile(drawingAllContours, "所有轮廓", name);
+                    #region
 
                     if (hierarchy[i].Child != -1 && ic == 0)
                     {
@@ -411,16 +421,12 @@ namespace QrCodeWeb.Services
                     //有两个子轮廓
                     if (ic >= 2)
                     {
+                        //画出所有轮廓图
                         // 保存找到的三个黑色定位角
-                        var points2 = Cv2.ApproxPolyDP(matcontours[parentIdx], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
-
+                        var points2 = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
                         if (points2.Length == 4)
                         {
-                            if (name == "1650182312378")
-                            {
-                                int s = 0;
-                            }
-                            var area = (int)Cv2.ContourArea(matcontours[parentIdx], false);
+                            var area = (int)Cv2.ContourArea(matcontours[i], false);
                             if (area > minAreaSzie && area < maxAreaSzie)
                             {
                                 RotatedRect rotated = Cv2.MinAreaRect(points2);
@@ -437,23 +443,32 @@ namespace QrCodeWeb.Services
                                     //rectPoints.FindLast(x => x.CenterPoints == rects.CenterPoints).MarkPoints = points2;
                                     rectPoints.Add(rects);
                                     //画出三个黑色定位角的轮廓
-                                    Cv2.DrawContours(drawingmark, matcontours, parentIdx, new Scalar(0, 125, 255), 1, LineTypes.Link8);
+                                    Cv2.DrawContours(drawingmark, matcontours, i, new Scalar(0, 125, 255), 1, LineTypes.Link8);
 
                                 }
                             }
                             else
                             {
-                                Cv2.DrawContours(drawingmarkminAreaSzie, matcontours, parentIdx, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                                Cv2.DrawContours(drawingmarkminAreaSzie, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
 
                             }
-                            ic = 0;
-                            parentIdx = -1;
                         }
+                        //else
+                        //{
+                        //    Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                        //    SaveMatFile(drawing, "无法逼近的轮廓", name);
+                        //}
+                        ic = 0;
+                        parentIdx = -1;
+
                     }
+
                 }
                 SaveMatFile(drawingmark, "三个定位点轮廓", name);
                 SaveMatFile(drawingAllContours, "所有轮廓", name);
                 SaveMatFile(drawingmarkminAreaSzie, "三个定位点轮廓_小于指定面积", name);
+
+
 
                 return rectPoints;
             }
@@ -464,6 +479,7 @@ namespace QrCodeWeb.Services
             }
 
         }
+
         Mat GetPosotionDetectionPatternsMat(Mat mat, List<RectPoints> rectPoints)
         {
             var maxw = rectPoints.Max(w => w.CenterPoints.X);
@@ -471,9 +487,11 @@ namespace QrCodeWeb.Services
             var prect = rectPoints.FindLast(f => f.CenterPoints.X == maxw);
             ///计算其中一个定位点周长，再根据周长计算单个二维码模块像素大小
             var ArcLength = Cv2.ArcLength(prect.MarkPoints, true);
-            var le = (int)(ArcLength / 4);//单边长
-            var ModuleSize = (int)(le / 7) + 2;//二维码模块像素大小
-
+            //单边长
+            var le = (int)(ArcLength / 4);
+            //二维码模块像素Size,取值5，是因为轮廓取的"回"中间的轮廓，按照比例是占的5个模块大小
+            var ModuleSize = (int)(le / 5) + 2;
+            
             var topx = (int)(maxw - ModuleSize * 5);
             var topy = (int)(minh - ModuleSize * 5);
             topy = topy < 0 ? 1 : topy;//防止越界
@@ -485,7 +503,7 @@ namespace QrCodeWeb.Services
 
             Rect rect = new Rect(topx, topy, w, w);//取得11个模块宽度
             Mat roi = new Mat(mat, rect);
-            // Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
+            Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
             return roi;
         }
 

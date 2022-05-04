@@ -314,6 +314,9 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
         using Mat drawingmarkminAreaSzie = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);        
         using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
         using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+
+        using Mat drawing = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
+        using Mat drawingf = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
         // 轮廓圈套层数
         rectPoints = new List<RectPoints>();
 
@@ -336,8 +339,23 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
             //{
             //    ic = ic + 1;
             //}
+            var area2 = (int)Cv2.ContourArea(matcontours[i], false);
+            if (area2 <= minAreaSzie || area2 >= maxAreaSzie) { continue; }
+
+            var approxPolyDP = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
+
+            if (approxPolyDP.Length != 4) {
+                //Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                //SaveMatFile(drawing, "无法逼近的轮廓", name);
+                continue;
+            }
+
+            //if (approxPolyDP.Length == 4) {
+            //    Cv2.DrawContours(drawingf, matcontours, i, new Scalar(255, 255, 255));
+            //    SaveMatFile(drawingf, "逼近4的轮廓", name);
+            //}
             Cv2.DrawContours(drawingAllContours, matcontours, i, new Scalar(255, 255, 255));
-           
+            SaveMatFile(drawingAllContours, "所有轮廓", name);
             #region
 
             if (hierarchy[i].Child != -1 && ic == 0)
@@ -359,17 +377,10 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
             if (ic >= 2)
             {
                 //画出所有轮廓图
-               
-
                 // 保存找到的三个黑色定位角
                 var points2 = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
-
                 if (points2.Length == 4)
                 {
-                    if(name== "1650182312378")
-                    {
-                        int s = 0;
-                    }
                     var  area = (int)Cv2.ContourArea(matcontours[i], false);
                     if (area > minAreaSzie && area<maxAreaSzie)
                     {
@@ -397,6 +408,11 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
                      
                     }
                 }
+                //else
+                //{
+                //    Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
+                //    SaveMatFile(drawing, "无法逼近的轮廓", name);
+                //}
                 ic = 0;
                 parentIdx = -1;
 

@@ -69,7 +69,6 @@ namespace QrCodeWeb.Controllers
                 CodeService.DetectAndDecode(mat, ref response);
                 // response.DeQRcodeContent = code;
                 TimeSpan span = DateTime.Now - startTime;
-
                 response.DateTime = $"{(int)span.TotalMilliseconds}";
                 return response;
             }
