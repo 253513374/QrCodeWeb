@@ -70,6 +70,8 @@ namespace QrCodeWeb.Controllers
                 // response.DeQRcodeContent = code;
                 TimeSpan span = DateTime.Now - startTime;
                 response.DateTime = $"{(int)span.TotalMilliseconds}";
+                Logger.LogInformation($"请求完成，本次耗时：{(int)span.TotalMilliseconds} 毫秒");
+                Logger.LogInformation("");
                 return response;
             }
             catch (Exception e)

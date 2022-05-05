@@ -8,9 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="OpenCvSharp">
-      <HintPath>..\QrCodeWeb\dll\OpenCvSharp.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\OpenCvSharp\OpenCvSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

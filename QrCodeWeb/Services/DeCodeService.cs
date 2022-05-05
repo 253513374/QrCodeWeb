@@ -59,13 +59,15 @@ namespace QrCodeWeb.Services
             Mat[] rects;
             wechatQrcode.DetectAndDecode(src, out rects, out texts);
 
+            
             // wechatQrcode.
             if (texts.Length <= 0)
             {
                 dst = null;
+                Logger.LogWarning($"二维码解析失败");
                 return "";
             }
-
+            Logger.LogInformation($"二维码解析成功，解析内容：{texts[0]}");
             Mat drawingmark = src.Clone();
             List<Point[]> lpoint = new();
             //for (int i = 0; i < rects.Length; i++)
