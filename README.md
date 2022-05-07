@@ -1,8 +1,36 @@
 
 
+# 一、QrCodeWeb 项目说明
+
+本项目是使用opencvsharp4 开源库 搭建的二维码识别API 。
+
+主要使用：opencvsharp4 中的微信二维码识别模块。
+
+目前opencvsharp4 正式发布的4.5.3 中是没有微信二维码识别功能的，要使用微信二维码识别功能 。
+
+但是当前opencvsharp4  在年初的时候合并了一个提交， 当中存在WeChatQRCode模块。
+
+本人使用opencvsharp4  源码重新编译了一个版本，使得可以通过opencvsharp4  使用微信开源的二维码模块。
+
+windows编译步骤如下
+
+1、首选先合并编译opencv与opencv_contrib 得到完整版的opencv
+
+2、使用编译好的opencv版本  来编译opencvsharp4  项目中的OpenCvSharpExtern项目
+
+（编译完成之后得到OpenCvSharp.dll与OpenCvSharpExtern.dll）
+
+3、在QrCodeWeb 项目中 添加引用OpenCvSharp.dll
+
+**注意：因为OpenCvSharp.dll依赖OpenCvSharpExtern.dll，所以还要把OpenCvSharpExtern.dll文件放在项目运行目录（即：编译好的程序目录）**
 
 
-# linux 编译opncv（4.5.5）
+
+
+
+linux 下的也是一样的步骤 ， 本人把linux 下的编译经历 也整理了以下，仅供参考。
+
+# 二、linux 编译opncv（4.5.5）
 
 ## 安装cmake
 
