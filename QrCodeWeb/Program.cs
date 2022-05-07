@@ -1,6 +1,7 @@
 using QrCodeWeb.Services;
 using Serilog;
 using Microsoft.AspNetCore.Hosting.Server;
+using System.Net;
 
 Log.Logger = new LoggerConfiguration()
    
@@ -12,6 +13,11 @@ Log.Information("Serilog 日志记录启动成功");
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
+    //builder.WebHost.UseKestrel(options =>
+    //{
+    //    options.Listen(IPAddress.Any, 5060);
+    //});
 
     // builder.WebHost.UseKestrel();
     builder.Host.UseSerilog((x, y) => y.WriteTo.Console().ReadFrom.Configuration(x.Configuration));
@@ -27,6 +33,7 @@ try
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
+
 
     app.UseSwagger();
     app.UseSwaggerUI();
