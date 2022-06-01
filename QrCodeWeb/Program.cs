@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Hosting.Server;
 using System.Net;
 
 Log.Logger = new LoggerConfiguration()
-   
     .WriteTo.Console()
     .CreateBootstrapLogger();
 
@@ -29,11 +28,11 @@ try
     builder.Services.AddSwaggerGen();
 
     builder.Services.AddScoped<DeCodeService>();
+    builder.Services.AddScoped<CutImageService>();
 
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
-
 
     app.UseSwagger();
     app.UseSwaggerUI();

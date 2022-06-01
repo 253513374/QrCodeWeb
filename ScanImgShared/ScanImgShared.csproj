@@ -1,11 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Boruida\" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="OpenCvSharp">
@@ -14,12 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="OpenCvSharp.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="OpenCvSharpExtern.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <None Update="WechatQrCodeFiles\detect.caffemodel">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

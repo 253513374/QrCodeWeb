@@ -9,9 +9,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "QrCodeWeb", "QrCodeWeb\QrCo
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleApp1", "ConsoleApp1\ConsoleApp1.csproj", "{471EB729-09DC-4516-9CB7-06935900D5CC}"
-	ProjectSection(ProjectDependencies) = postProject
-		{A473CDF4-F1FA-4054-8FED-8419731C0959} = {A473CDF4-F1FA-4054-8FED-8419731C0959}
-	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenCvSharp", "OpenCvSharp\OpenCvSharp.csproj", "{A473CDF4-F1FA-4054-8FED-8419731C0959}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -19,6 +16,14 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenCvSharp", "OpenCvSharp\
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OpenCvSharpExtern", "OpenCvSharpExtern\OpenCvSharpExtern.vcxproj", "{8E7279F8-F801-4672-B42F-1ED2C68B16A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScanImgShared", "ScanImgShared\ScanImgShared.csproj", "{750F96DE-9692-436D-AB8E-A7E5EA795FD3}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ExpandDLL", "ExpandDLL", "{E452E621-DABB-464E-B97F-4A9F75CD78F2}"
+	ProjectSection(SolutionItems) = preProject
+		OpenCvSharp.dll = OpenCvSharp.dll
+		OpenCvSharpExtern.dll = OpenCvSharpExtern.dll
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -105,6 +110,24 @@ Global
 		{8E7279F8-F801-4672-B42F-1ED2C68B16A4}.Release-JP|x64.Build.0 = Release|x64
 		{8E7279F8-F801-4672-B42F-1ED2C68B16A4}.Release-JP|x86.ActiveCfg = Release|Win32
 		{8E7279F8-F801-4672-B42F-1ED2C68B16A4}.Release-JP|x86.Build.0 = Release|Win32
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|x64.Build.0 = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Debug|x86.Build.0 = Debug|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|x64.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|x64.Build.0 = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|x86.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release|x86.Build.0 = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|Any CPU.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|Any CPU.Build.0 = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|x64.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|x64.Build.0 = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|x86.ActiveCfg = Release|Any CPU
+		{750F96DE-9692-436D-AB8E-A7E5EA795FD3}.Release-JP|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

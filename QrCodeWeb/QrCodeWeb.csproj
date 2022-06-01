@@ -15,9 +15,13 @@
 	</PropertyGroup>
   <ItemGroup>
     <Compile Remove="OpenCvSharpExtern\**" />
+    <Compile Remove="Shareds\**" />
     <Content Remove="OpenCvSharpExtern\**" />
+    <Content Remove="Shareds\**" />
     <EmbeddedResource Remove="OpenCvSharpExtern\**" />
+    <EmbeddedResource Remove="Shareds\**" />
     <None Remove="OpenCvSharpExtern\**" />
+    <None Remove="Shareds\**" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.0" />
@@ -27,17 +31,13 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="5.1.1" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.1" />
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
-    <PackageReference Include="ZXing.Net" Version="0.16.8" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Shareds\" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\OpenCvSharp\OpenCvSharp.csproj" />
+    <ProjectReference Include="..\ScanImgShared\ScanImgShared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,50 +1,56 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using OpenCvSharp;
+using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 
 Console.WriteLine("Hello, World!");
 int k = 0;
 List<string> files = new List<string>();
 
-var path =  Console.ReadLine();
+var path = Console.ReadLine();
 
-GetFiles(@"E:\ProjectCode\QrCodeWeb\img", ref files);
+GetFiles(@"C:\Users\q4528\Desktop\测试数据\甄品保图像检测", ref files);
 
 int OK = 0;
-
 
 for (int i = 0; i < files.Count; i++)
 {
     DateTime date = DateTime.Now;
     var file = files[i];
+    //var file = @"C:\Users\q4528\Desktop\测试数据\甄品保图像检测\4.jpg";
     var filename = Path.GetFileName(file).Replace(".jpg", "");
     using Mat Src = Cv2.ImRead(file);
-    Mat GRAY_mat ;
+    Mat GRAY_mat;
     SaveMatFile(Src, $"原图", filename);
     //Cv2.CvtColor(Src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
     //SaveMatFile(GRAY_mat, $"GRAY_mat", filename);
-    
-    var qrcode =   Decode(Src, filename, out GRAY_mat);
+    int wsize = -1;
+    var qrcode = Decode(Src, filename, out GRAY_mat, out wsize);
+
+    //if (qrcode is not "")
+    //{
+    //    Mat mat = HoughLines(Src, wsize, filename);
+    //}
+    //k = 0;
+    //continue;
 
     if (GRAY_mat is not null)
     {
-        
         Mat w = WarpAffine(GRAY_mat, filename);
-
 
         List<RectPoints> rectPoints = await MatPreprocessing(w.Clone(), filename);
 
         Point2f center;
-        int rotationAngle = GetRotationAngle(rectPoints, out  center);
+        int rotationAngle = GetRotationAngle(rectPoints, out center);
 
-        Mat m= Cv2.GetRotationMatrix2D(center, rotationAngle, 1);
+        Mat m = Cv2.GetRotationMatrix2D(center, rotationAngle, 1);
         Mat dst = new Mat();
         Cv2.WarpAffine(w, dst, m, dst.Size());
         SaveMatFile(dst, $"矫正之后的原图", filename);
 
-        Mat PatternsMat =GetPosotionDetectionPatternsMat(dst, rectPoints);
+        Mat PatternsMat = GetPosotionDetectionPatternsMat(dst, rectPoints);
         SaveMatFile(PatternsMat, $"指定定位点", filename);
-
 
         if (rectPoints.Count >= 3)
         {
@@ -54,7 +60,7 @@ for (int i = 0; i < files.Count; i++)
     }
     else
     {
-        Console.WriteLine($"{i+1}:{Difference(date)}：完成{filename}：{qrcode}-- 找不到二维码");
+        Console.WriteLine($"{i + 1}:{Difference(date)}：完成{filename}：{qrcode}-- 找不到二维码");
     }
     k = 0;
 }
@@ -62,10 +68,8 @@ for (int i = 0; i < files.Count; i++)
 var b = Math.Round((double)OK / (double)files.Count, 3) * 100;
 Console.WriteLine($"共：{files.Count}；成功数量：{OK};成功率：{b}%");
 
-
-async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
+async Task<List<RectPoints>> MatPreprocessing(Mat src, string filename)
 {
-
     Mat GRAY_mat = new Mat();
     Cv2.CvtColor(src.Clone(), GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
 
@@ -82,8 +86,6 @@ async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
 
     SaveMatFile(srthreshold, "自适应阈值二值化", filename);
 
-
-
     //Mat DST = new Mat();
     //Cv2.Normalize(MedianBlur, DST, 0, 255, NormTypes.MinMax, 1);
 
@@ -94,23 +96,19 @@ async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
     //Cv2.Dilate(GRAY_mat, Dilate, elementDilate);
     //SaveMatFile(Dilate, $"Dilate", filename);
 
-
     //闭运算
     //Mat MorphologyEx_Close = new Mat();
     //Mat elementClose = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
     //Cv2.MorphologyEx(GRAY_mat, MorphologyEx_Close, MorphTypes.Close, elementClose);
     //SaveMatFile(MorphologyEx_Close, "MorphologyEx_Close", filename);
 
-
-    int moduleSzie = (int)((GRAY_mat.Width / 31)/2);
+    int moduleSzie = (int)((GRAY_mat.Width / 31) / 2);
 
     //膨胀运算，使用7*7的矩形核
     Mat MorphologyEx_Dilate = new Mat();
     Mat elementDilate = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
     Cv2.MorphologyEx(srthreshold, MorphologyEx_Dilate, MorphTypes.Dilate, elementDilate);
     SaveMatFile(MorphologyEx_Dilate, "MorphologyEx_Open", filename);
-
-
 
     //腐蚀运算，使用3*3的矩形核
     Mat MorphologyEx_Erode = new Mat();
@@ -125,7 +123,6 @@ async Task<List<RectPoints>> MatPreprocessing(Mat src,string filename)
     List<RectPoints> rectPoints = GetPosotionDetectionPatternsPoints(MorphologyEx_Erode, filename);
 
     return rectPoints;
-
 }
 double Difference(DateTime date)
 {
@@ -154,7 +151,7 @@ Task GetFiles(string path, ref List<string> files)
     return Task.CompletedTask;
 }
 
-Mat WarpAffine(Mat roi,string filename)
+Mat WarpAffine(Mat roi, string filename)
 {
     Mat src = roi.Clone();
     Mat drawsrc = roi.Clone();
@@ -171,9 +168,8 @@ Mat WarpAffine(Mat roi,string filename)
     SaveMatFile(Erode, $"Erode", filename);
     //
 
-
     Mat Threshold_mat = new Mat();
-    Cv2.Threshold(Erode, Threshold_mat, 0,255,  ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
+    Cv2.Threshold(Erode, Threshold_mat, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
     SaveMatFile(Threshold_mat, "WarpAffine_Threshold二值化", filename);
 
     //Mat Threshold_mat11 = new Mat();
@@ -185,7 +181,7 @@ Mat WarpAffine(Mat roi,string filename)
     Cv2.Dilate(Threshold_mat, Dilatedst, elementDilate1);
 
     SaveMatFile(Dilatedst, "二维码膨胀边界图像", filename);
-    
+
     Dilatedst.FindContours(out var contours, out var hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
 
     if (contours.Length <= 0)
@@ -210,13 +206,13 @@ Mat WarpAffine(Mat roi,string filename)
             }
         }
     }
-    if (pts.Count <= 0) 
-    { 
-        return null; 
+    if (pts.Count <= 0)
+    {
+        return null;
     }
 
     const double whilwecount = 0.05;
-   // int count = 0;
+    // int count = 0;
     double x = 0.01;
     Point[] tp = new Point[4];
     while (x < whilwecount)
@@ -256,28 +252,27 @@ Mat WarpAffine(Mat roi,string filename)
         new Point2f(tp[3].X,tp[3].Y)
     };
     //定义变换之后的二维码Size
-    int sizew = Math.Max((int)rotated.Size.Width+50, (int)rotated.Size.Height+50);
+    int sizew = Math.Max((int)rotated.Size.Width + 50, (int)rotated.Size.Height + 50);
     int boxw = 30;
     Rect rect = new Rect(0, 0, sizew, sizew);
     Point2f[] dstpoint = new Point2f[4];
     dstpoint[0] = new Point2f(boxw, boxw);
-    dstpoint[1] = new Point2f(boxw, sizew- boxw);
-    dstpoint[2] = new Point2f(sizew- boxw, sizew- boxw);
-    dstpoint[3] = new Point2f(sizew- boxw, boxw);
+    dstpoint[1] = new Point2f(boxw, sizew - boxw);
+    dstpoint[2] = new Point2f(sizew - boxw, sizew - boxw);
+    dstpoint[3] = new Point2f(sizew - boxw, boxw);
 
     //对二值化的二维码区域进行透视变换，
     using Mat warpMatrix = Cv2.GetPerspectiveTransform(srcpoint, dstpoint);
     Mat dst = new Mat(rect.Size, MatType.CV_8UC3);
     Cv2.WarpPerspective(roi, dst, warpMatrix, dst.Size(), InterpolationFlags.Linear, BorderTypes.Constant);
 
-   // dst.ConvertTo(dst, MatType.CV_8UC1, 2, 10);
+    // dst.ConvertTo(dst, MatType.CV_8UC1, 2, 10);
     SaveMatFile(dst, "透视变换结果", filename);
-
 
     return dst;
 }
 
-Task SaveMatFile(Mat array, string name,string FileNmae,int i=0)
+Task SaveMatFile(Mat array, string name, string FileNmae, int i = 0)
 {
     var filepathw = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"testdata");
     if (!Directory.Exists(filepathw))
@@ -294,13 +289,13 @@ Task SaveMatFile(Mat array, string name,string FileNmae,int i=0)
 
     var filepath = Path.Combine(filepathw2, $"{k}_{name}.jpg");
     // Mat image = array.GetMat();
-    k ++;
+    k++;
     //ImageEncodingParam param = new ImageEncodingParam(ImageEncodingFlags.);
     array.SaveImage(filepath);
     return Task.CompletedTask;
 }
 
-List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
+List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat, string name)
 {
     try
     {
@@ -311,7 +306,7 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
         Cv2.FindContours(dilatemat, out matcontours, out hierarchy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
 
         using Mat drawingmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
-        using Mat drawingmarkminAreaSzie = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);        
+        using Mat drawingmarkminAreaSzie = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
         using Mat drawingAllmark = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
         using Mat drawingAllContours = Mat.Zeros(dilatemat.Size(), MatType.CV_8UC3);
 
@@ -321,39 +316,24 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
         rectPoints = new List<RectPoints>();
 
         double moduleSzie = dilatemat.Width / 31;
-        double minAreaSzie = (moduleSzie* 4)* (moduleSzie *4);
+        double minAreaSzie = (moduleSzie * 4) * (moduleSzie * 4);
         double maxAreaSzie = (moduleSzie * 12) * (moduleSzie * 12);
         //通过黑色定位角作为父轮廓，有两个子轮廓的特点，筛选出三个定位角
         int ic = 0;
         int parentIdx = -1;
         for (int i = 0; i < matcontours.Length; i++)
         {
-            //int ic = 0;
-            //int childIdx = i;
-            //while (hierarchy[childIdx].Child != -1)
-            //{
-            //    childIdx = hierarchy[childIdx].Child;
-            //    ic = ic + 1;
-            //}
-            //if (hierarchy[childIdx].Child != -1)
-            //{
-            //    ic = ic + 1;
-            //}
             var area2 = (int)Cv2.ContourArea(matcontours[i], false);
             if (area2 <= minAreaSzie || area2 >= maxAreaSzie) { continue; }
 
-            var approxPolyDP = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
+            var approxPolyDP = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);//
 
-            if (approxPolyDP.Length != 4) {
+            if (approxPolyDP.Length != 4)
+            {
                 //Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
                 //SaveMatFile(drawing, "无法逼近的轮廓", name);
                 continue;
             }
-
-            //if (approxPolyDP.Length == 4) {
-            //    Cv2.DrawContours(drawingf, matcontours, i, new Scalar(255, 255, 255));
-            //    SaveMatFile(drawingf, "逼近4的轮廓", name);
-            //}
             Cv2.DrawContours(drawingAllContours, matcontours, i, new Scalar(255, 255, 255));
             SaveMatFile(drawingAllContours, "所有轮廓", name);
             #region
@@ -378,11 +358,11 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
             {
                 //画出所有轮廓图
                 // 保存找到的三个黑色定位角
-                var points2 = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);// 
+                var points2 = Cv2.ApproxPolyDP(matcontours[i], 0.03 * Cv2.ArcLength(matcontours[i].ToArray(), true), true);//
                 if (points2.Length == 4)
                 {
-                    var  area = (int)Cv2.ContourArea(matcontours[i], false);
-                    if (area > minAreaSzie && area<maxAreaSzie)
+                    var area = (int)Cv2.ContourArea(matcontours[i], false);
+                    if (area > minAreaSzie && area < maxAreaSzie)
                     {
                         RotatedRect rotated = Cv2.MinAreaRect(points2);
                         var w = rotated.Size.Width;
@@ -399,13 +379,11 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
                             rectPoints.Add(rects);
                             //画出三个黑色定位角的轮廓
                             Cv2.DrawContours(drawingmark, matcontours, i, new Scalar(0, 125, 255), 1, LineTypes.Link8);
-                         
                         }
                     }
                     else
                     {
                         Cv2.DrawContours(drawingmarkminAreaSzie, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
-                     
                     }
                 }
                 //else
@@ -415,57 +393,49 @@ List<RectPoints> GetPosotionDetectionPatternsPoints(Mat dilatemat,string name)
                 //}
                 ic = 0;
                 parentIdx = -1;
-
             }
-
         }
         SaveMatFile(drawingmark, "三个定位点轮廓", name);
         SaveMatFile(drawingAllContours, "所有轮廓", name);
         SaveMatFile(drawingmarkminAreaSzie, "三个定位点轮廓_小于指定面积", name);
-
-
 
         return rectPoints;
     }
     catch (Exception ee)
     {
         return new List<RectPoints>();
-       // throw;
+        // throw;
     }
-  
 }
 
-
-string Decode(Mat src,string filename, out Mat dst)
+string Decode(Mat src, string filename, out Mat dst, out int wsize)
 {
     string _wechat_QCODE_detector_prototxt_path = "WechatQrCodeFiles/detect.prototxt";
     string _wechat_QCODE_detector_caffe_model_path = "WechatQrCodeFiles/detect.caffemodel";
     string _wechat_QCODE_super_resolution_prototxt_path = "WechatQrCodeFiles/sr.prototxt";
     string _wechat_QCODE_super_resolution_caffe_model_path = "WechatQrCodeFiles/sr.caffemodel";
-    
+
     var wechatQrcode = WeChatQRCode.Create(_wechat_QCODE_detector_prototxt_path, _wechat_QCODE_detector_caffe_model_path,
                                                  _wechat_QCODE_super_resolution_prototxt_path, _wechat_QCODE_super_resolution_caffe_model_path);
-
-   // Mat MedianBlur = new Mat();
-
-   // Cv2.MedianBlur(src, MedianBlur, 11);
-
 
     string[] texts;
     Mat[] rects;
     wechatQrcode.DetectAndDecode(src, out rects, out texts);
 
     // wechatQrcode.
+    wsize = -1;
     if (texts.Length <= 0)
     {
         dst = null;
         return "";
     }
+    //wsize = (int)rects[0].Width;
 
     Mat drawingmark = src.Clone();
     List<Point[]> lpoint = new();
     //for (int i = 0; i < rects.Length; i++)
     //{
+    ///获取二维码在原图中的四个坐标点
     var ss = rects[0];
     OutputArray array = ss;
     Point pt1 = new Point((int)ss.At<float>(0, 0), (int)ss.At<float>(0, 1));
@@ -473,19 +443,34 @@ string Decode(Mat src,string filename, out Mat dst)
     Point pt3 = new Point((int)ss.At<float>(2, 0), (int)ss.At<float>(2, 1));
     Point pt4 = new Point((int)ss.At<float>(3, 0), (int)ss.At<float>(3, 1));
     lpoint.Add(new Point[] { pt1, pt2, pt3, pt4 });
-    Cv2.DrawContours(drawingmark, lpoint.ToArray(), 0, new Scalar(0, 125, 255), 5, LineTypes.Link8);
 
-   
-
+    Cv2.DrawContours(drawingmark, lpoint.ToArray(), 0, new Scalar(0, 125, 255), 3, LineTypes.Link8);
+    SaveMatFile(drawingmark, "二维码位置", filename);
+    ///设置截图范围Rect
     RotatedRect rotatedRect = ss.MinAreaRect();
     var center = rotatedRect.Center;
     var size2F = rotatedRect.Size;
-    var MAX = Math.Max(size2F.Width, size2F.Height);
+    var MAX = Math.Min(size2F.Width, size2F.Height);
+
+    //src.DrawContours(lpoint.ToArray(), 0, new Scalar(0, 125, 255), 3, LineTypes.Link8);
+
+    //SaveMatFile(src, "二维码截取", filename);
+    wsize = (int)MAX;
+    #region  //博瑞达 二维码截图范围
     var RoiSize = new Size(MAX + (MAX / 2), MAX + (MAX / 2));
     var RoiPoint = new Point(center.X - (MAX / 2) - (MAX / 4), center.Y - (MAX / 2) - (MAX / 4));
 
     Rect rectroi = new Rect(RoiPoint, RoiSize);
     dst = new Mat(src, rectroi);
+    #endregion
+
+    #region  //甄品保二维码截图范围
+    //var zRoiSize = new Size(MAX * 2, MAX * 2);
+    //var zRoiPoint = new Point(center.X - MAX, center.Y - MAX);
+
+    //Rect zrectroi = new Rect(zRoiPoint, zRoiSize);
+    //dst = new Mat(src, zrectroi);
+    #endregion
 
     SaveMatFile(dst, "二维码截取", filename);
     //   warpAffine(dst, image, M, sz);
@@ -498,9 +483,8 @@ double Distance(Point2f a, Point2f b)
     var selflen = Math.Sqrt((selfx * selfx) + (selfy * selfy));
     return selflen;
 }
-int GetRotationAngle(List<RectPoints> rectPoints,out Point2f QRMatCenterPoint)
+int GetRotationAngle(List<RectPoints> rectPoints, out Point2f QRMatCenterPoint)
 {
-
     //Log.Information($"计算二维码边界坐标顺序：开始");
     //var width = rectPoints.Max(x => x.MarkPoints[0].X);
     int a = 0, b = 1, c = 2, d = 3;
@@ -600,7 +584,6 @@ int GetRotationAngle(List<RectPoints> rectPoints,out Point2f QRMatCenterPoint)
     }
     else if (QRMatCenterPoint.X < topPoint.X && QRMatCenterPoint.Y > topPoint.Y)
     {
-
         #region 第二象限
         //var topx = rectPoints[selecttop].MarkPoints.Max(s => s.X);
         //var topy = rectPoints[selecttop].MarkPoints.Min(s => s.Y);
@@ -631,11 +614,9 @@ int GetRotationAngle(List<RectPoints> rectPoints,out Point2f QRMatCenterPoint)
         #endregion
 
         RotationAngle = 90;
-
     }
     else if (QRMatCenterPoint.X < topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
     {
-
         #region 第三象限
         //var ax = rectPoints[selecttop].MarkPoints.Max(s => s.X);
         //var ay = rectPoints[selecttop].MarkPoints.Max(s => s.Y);
@@ -666,15 +647,13 @@ int GetRotationAngle(List<RectPoints> rectPoints,out Point2f QRMatCenterPoint)
         #endregion
 
         RotationAngle = 180;
-
     }
     else if (QRMatCenterPoint.X > topPoint.X && QRMatCenterPoint.Y < topPoint.Y)
     {
-
         #region 第四象限
         //var topx = rectPoints[selecttop].MarkPoints.Min(s => s.X);
         //var topy = rectPoints[selecttop].MarkPoints.Max(s => s.Y);
-        //QRrect[a] = new Point(topx, topy); 
+        //QRrect[a] = new Point(topx, topy);
 
         //for (int i = 0; i < rectPoints.Count; i++)
         //{
@@ -685,7 +664,7 @@ int GetRotationAngle(List<RectPoints> rectPoints,out Point2f QRMatCenterPoint)
         //        {
         //            var dx = marks.Max(m => m.X);
         //            var dy = marks.Max(m => m.Y);
-        //            QRrect[d] = new Point(dx, dy); 
+        //            QRrect[d] = new Point(dx, dy);
         //        }
         //        if (rectPoints[i].CenterPoints.Y < QRMatCenterPoint.Y)
         //        {
@@ -719,19 +698,134 @@ Mat GetPosotionDetectionPatternsMat(Mat mat, List<RectPoints> rectPoints)
     ///计算其中一个定位点周长，再根据周长计算单个二维码模块像素大小
     var ArcLength = Cv2.ArcLength(prect.MarkPoints, true);
     var le = (int)(ArcLength / 4);//单边长
-    var ModuleSize = (int)(le / 5)+2;//二维码模块像素大小
+    var ModuleSize = (int)(le / 5) + 2;//二维码模块像素大小
 
     var topx = (int)(maxw - ModuleSize * 5);
     var topy = (int)(minh - ModuleSize * 5);
     topy = topy < 0 ? 1 : topy;//防止越界
 
-    var width=mat.Width - topx - 1;
+    var width = mat.Width - topx - 1;
 
     var rectwidth = ModuleSize * 11;
     var w = (ModuleSize * 11) > width ? width : (ModuleSize * 10);
 
     Rect rect = new Rect(topx, topy, w, w);//取得11个模块宽度
     Mat roi = new Mat(mat, rect);
-   // Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
+    // Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
     return roi;
 }
+
+Mat HoughLines(Mat mat, int w, string filename)
+{
+    Mat gray = new Mat();
+    Cv2.CvtColor(mat, gray, ColorConversionCodes.BGR2GRAY);
+
+    Mat mblur = new Mat();
+    Cv2.MedianBlur(gray, mblur, 3);
+    SaveMatFile(mblur, "MedianBlur", filename);
+    // Cv2.GaussianBlur(gray, mblur, new Size(7, 7), 0);
+
+    //SaveMatFile(mblur, "GaussianBlur", filename);
+
+    Mat canny = new Mat();
+    // Cv2.Laplacian(mblur, canny, MatType.CV_8U, 5, 1, 0);
+    Cv2.Canny(mblur, canny, 100, 200, 3, false);
+    //  Cv2.de
+    SaveMatFile(canny, "Laplacian", filename);
+
+    Mat tmat = new Mat();
+    Cv2.Threshold(mblur, tmat, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+    //Cv2.AdaptiveThreshold(mblur, tmat, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 101, 2);
+    SaveMatFile(tmat, "AdaptiveThresholdOtsu", filename);
+
+    Mat MorphologyEx_Erode = new Mat();
+    Mat elementErode = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(11, 11));
+    Cv2.MorphologyEx(tmat, MorphologyEx_Erode, MorphTypes.Erode, elementErode);
+    SaveMatFile(MorphologyEx_Erode, "MorphologyEx_Erode", filename);
+
+    Mat MorphologyEx_Dilate = new Mat();
+    Mat elementDilate = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(25, 25));
+    Cv2.MorphologyEx(MorphologyEx_Erode, MorphologyEx_Dilate, MorphTypes.Dilate, elementErode);
+    SaveMatFile(MorphologyEx_Dilate, "MorphologyEx_Dilate", filename);
+
+    Mat BitwiseNot = new Mat();
+    Cv2.BitwiseNot(MorphologyEx_Erode, BitwiseNot);
+    SaveMatFile(BitwiseNot, "BitwiseNot", filename);
+
+    Point[][] filltercontours;
+    HierarchyIndex[] hierarchy;
+    ///算出二维码轮廓
+    Cv2.FindContours(BitwiseNot, out filltercontours, out hierarchy, RetrievalModes.List, ContourApproximationModes.ApproxSimple);
+
+    var minArea = (w * w) * 1.5;
+    var maxArea = (w * w) * 8.0;
+    var minWidthPerimeter = w;
+    var maxHeightPerimeter = w * 5;
+    Mat draw = new Mat(mat.Size(), mat.Type(), Scalar.All(0));
+    Mat drawpoints = new Mat(mat.Size(), mat.Type(), Scalar.All(0));
+    Mat drawpointsmat = mat.Clone();
+    for (int i = 0; i < filltercontours.Length; i++)
+    {
+        var area = Cv2.ContourArea(filltercontours[i]);
+        if (area >= minArea && area <= maxArea)
+        {
+            Cv2.DrawContours(mat, filltercontours, i, new Scalar(0, 0, 255), 2, LineTypes.Link8, hierarchy, 0, null);
+            SaveMatFile(mat, "matcontours", filename);
+
+            var points = Cv2.ApproxPolyDP(filltercontours[i], Cv2.ArcLength(filltercontours[i], true) * 0.03, true);
+            if (points.Length == 4)
+            {
+                double minCosine = 0;
+                double maxCosine = 0;
+                CompareDistance(points, out minCosine, out maxCosine);
+                if (minCosine / maxCosine >= 0.35 && minCosine >= minWidthPerimeter && maxCosine <= maxHeightPerimeter)
+                {
+                    for (int j = 0; j < points.Length; j++)
+                    {
+                        Cv2.Line(drawpointsmat, points[j], points[(j + 1) % 4], Scalar.Red, 3);
+                    }
+                    SaveMatFile(drawpointsmat, "drawpointsmat", filename);
+                }
+                else
+                {
+                    Cv2.DrawContours(drawpoints, filltercontours, i, Scalar.All(255), 3);
+
+                    SaveMatFile(drawpoints, "drawpoints", filename);
+                }
+            }
+        }
+        else
+        {
+            Cv2.DrawContours(draw, filltercontours, i, new Scalar(0, 0, 255), 1, LineTypes.Link8, hierarchy, 0, null);
+        }
+    }
+    SaveMatFile(draw, "draw", filename);
+
+    return mat;
+}
+
+void CompareDistance(Point[] points, out double min, out double max)
+{
+    //double length = 0;
+    min = 999999999.0;
+    max = -1.0;
+    for (int i = 0; i < points.Length; i++)
+    {
+        var p1 = points[i];
+        var p2 = points[(i + 1) % points.Length];
+        var dx = p1.DistanceTo(p2);
+        min = Math.Min(min, dx);
+        max = Math.Max(max, dx);
+    }
+    // return length;
+}
+//{
+//    double minwidth = 0;
+//    for (int i = 0; i < points.Length; i++)
+//    {
+//        var width = points[i].DistanceTo(points[(i + 1) % points.Length];
+//        var minwidth =  Math.Min();
+//        // length += Math.Sqrt(Math.Pow(points[i].X - points[(i + 1) % points.Length].X, 2) + Math.Pow(points[i].Y - points[(i + 1) % points.Length].Y, 2));
+//    }
+//    return minwidth;
+//}

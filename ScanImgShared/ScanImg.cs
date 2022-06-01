@@ -1,8 +1,6 @@
 ﻿using OpenCvSharp;
 using OpenCvSharp.Internal.Vectors;
-using QrCodeWeb.Controllers;
-using QrCodeWeb.Datas;
-using Serilog;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
@@ -15,31 +13,39 @@ using System.Runtime.Intrinsics;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Xml.Linq;
+
 using static System.Net.Mime.MediaTypeNames;
 using Point = OpenCvSharp.Point;
 using Size = OpenCvSharp.Size;
 
-namespace QrCodeWeb.Services
+namespace ScanImgShared
 {
-    public class DeCodeService
+    public class ScanImg
     {
         private const string _wechat_QCODE_detector_prototxt_path = "WechatQrCodeFiles/detect.prototxt";
         private const string _wechat_QCODE_detector_caffe_model_path = "WechatQrCodeFiles/detect.caffemodel";
         private const string _wechat_QCODE_super_resolution_prototxt_path = "WechatQrCodeFiles/sr.prototxt";
         private const string _wechat_QCODE_super_resolution_caffe_model_path = "WechatQrCodeFiles/sr.caffemodel";
-        private IWebHostEnvironment Environment { get; }
-        private readonly ILogger<DeCodeService> Logger;
+        //private IWebHostEnvironment Environment { get; }
+        //   private readonly ILogger<DeCodeService> Logger;
 
         public string FileNmae { get; set; }
         public int FileNmaeIdnex { get; set; } = 1;
 
-        public DeCodeService(IWebHostEnvironment environment, ILogger<DeCodeService> logger)
+        public ScanImg()
         {
-            Environment = environment;
-            Logger = logger;
+            //Environment = environment;
+            //Logger = logger;
         }
 
-        private string Decode(Mat src, out Mat dst, string filename = "")
+        /// <summary>
+        /// 解析二维码图片，返回二维码截图。
+        /// 截图大小为二维码的 2倍
+        /// </summary>
+        /// <param name="src"></param>
+        /// <param name="dst"></param>
+        /// <returns></returns>
+        private string DecodeImg(Mat src, out Mat dst)
         {
             string _wechat_QCODE_detector_prototxt_path = "WechatQrCodeFiles/detect.prototxt";
             string _wechat_QCODE_detector_caffe_model_path = "WechatQrCodeFiles/detect.caffemodel";
@@ -57,10 +63,10 @@ namespace QrCodeWeb.Services
             if (texts.Length <= 0)
             {
                 dst = null;
-                Logger.LogWarning($"二维码解析失败");
+                //  Logger.LogWarning($"二维码解析失败");
                 return "";
             }
-            Logger.LogInformation($"二维码解析成功，解析内容：{texts[0]}");
+            // Logger.LogInformation($"二维码解析成功，解析内容：{texts[0]}");
             Mat drawingmark = src.Clone();
             List<Point[]> lpoint = new();
             //for (int i = 0; i < rects.Length; i++)
@@ -86,16 +92,18 @@ namespace QrCodeWeb.Services
             return texts[0];
         }
 
-        private Mat WarpAffine(Mat roi, string filename = "")
+        /// <summary>
+        /// 对二维码图片进行透视变换。
+        /// 流程：1、对图像进行预处理，图像灰度化->二值化->腐蚀->膨胀->形态学操作->轮廓提取->轮廓检测->轮廓矩形框提取->轮廓矩形框透视变换
+        /// </summary>
+        /// <param name="roi">二维码图片</param>
+        /// <returns>返回 变换后的图片</returns>
+        private Mat WarpAffine(Mat roi)
         {
             Mat src = roi.Clone();
             Mat drawsrc = roi.Clone();
             Mat GRAY_mat = new Mat();
             Cv2.CvtColor(src, GRAY_mat, ColorConversionCodes.BGR2GRAY);//转成灰度图
-
-            //Mat ConvertTo = new Mat();
-            //GRAY_mat.ConvertTo(ConvertTo, MatType.CV_8UC1, 2, 7);
-            //SaveMatFile(ConvertTo, $"ConvertTo", filename);
 
             Mat elementErode = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(35, 35));
             Mat Erode = new Mat();
@@ -105,7 +113,6 @@ namespace QrCodeWeb.Services
             Mat Threshold_mat = new Mat();
             Cv2.Threshold(Erode, Threshold_mat, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
             // SaveMatFile(Threshold_mat, "WarpAffine_Threshold二值化", filename);
-
             //Mat Threshold_mat11 = new Mat();
             //Cv2.AdaptiveThreshold(Erode, Threshold_mat11,  255, AdaptiveThresholdTypes.MeanC,ThresholdTypes.BinaryInv,101,2);
             //SaveMatFile(Threshold_mat11, "WarpAffine_AdaptiveThreshold二值化", filename);
@@ -113,8 +120,6 @@ namespace QrCodeWeb.Services
             Mat elementDilate1 = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
             Mat Dilatedst = new Mat();
             Cv2.Dilate(Threshold_mat, Dilatedst, elementDilate1);
-
-            // SaveMatFile(Dilatedst, "WarpAffine_二维码膨胀边界图像", filename);
 
             Dilatedst.FindContours(out var contours, out var hierarchy, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
 
@@ -124,17 +129,14 @@ namespace QrCodeWeb.Services
             }
 
             List<Point> pts = new();
-
             double matarea = 0;
             for (int i = 0; i < contours.Length; i++)
             {
                 var area = Cv2.ContourArea(contours[i]);
                 if (area > 1000)
                 {
-                    // matarea = Math.Max(matarea, area);
                     if (area > matarea)
                     {
-                        // Cv2.ap
                         matarea = area;
                         pts = contours[i].ToList();
                     }
@@ -168,14 +170,14 @@ namespace QrCodeWeb.Services
             var pp = new List<Point[]>();
             pp.Add(tp.ToArray());
             mat.DrawContours(pp.ToArray(), -1, new Scalar(255), -1);
-            SaveMatFile(mat, "WarpAffine_二维码区域掩膜", filename);
+            // SaveMatFile(mat, "WarpAffine_二维码区域掩膜", filename);
 
             for (int i = 0; i < tp.Length; i++)
             {
                 drawsrc.PutText(i.ToString(), tp[i], HersheyFonts.HersheySimplex, 2, new Scalar(255), 2);
                 drawsrc.Line(tp[i], tp[(i + 1) % 4], new Scalar(255), 2);
             }
-            SaveMatFile(drawsrc, "WarpAffine_圈定二维码区", filename);
+            //SaveMatFile(drawsrc, "WarpAffine_圈定二维码区", filename);
             RotatedRect rotated = Cv2.MinAreaRect(tp.ToArray());
             Point2f[] srcpoint = new Point2f[]
             {
@@ -200,62 +202,62 @@ namespace QrCodeWeb.Services
             Cv2.WarpPerspective(roi, dst, warpMatrix, dst.Size(), InterpolationFlags.Linear, BorderTypes.Constant);
 
             // dst.ConvertTo(dst, MatType.CV_8UC1, 2, 10);
-            SaveMatFile(dst, "透视变换结果", filename);
+            // SaveMatFile(dst, "透视变换结果", filename);
 
             return dst;
         }
 
-        public Task DetectAndDecode(Mat image, ref ResponseModel response)
-        {
-            Mat SrcRoi = new Mat();
-            var code = Decode(image, out SrcRoi);
-            SaveMatFile(SrcRoi, "截取二维码区域");
-            response.DeQRcodeContent = code;
-            if (code.Length == 0)
-            {
-                response.Code = "501";
-                response.Message = "找不到二维码";
-                return Task.CompletedTask;
-            }
+        //public Task DetectAndDecode(Mat image)
+        //{
+        //    Mat SrcRoi = new Mat();
+        //    var code = Decode(image, out SrcRoi);
+        //    //SaveMatFile(SrcRoi, "截取二维码区域");
+        //    response.DeQRcodeContent = code;
+        //    if (code.Length == 0)
+        //    {
+        //        response.Code = "501";
+        //        response.Message = "找不到二维码";
+        //        return Task.CompletedTask;
+        //    }
 
-            ///获取完整二维码
-            Mat warpaffinemat = WarpAffine(SrcRoi.Clone());
-            // SaveMatFile(warpaffinemat, "warpaffinemat");
-            ///图形预处理，方便查找定位点
-            Mat mat_morphologyEx = MatPreprocessing(warpaffinemat.Clone());
-            //查找二维码的三个定位点
-            List<RectPoints> PatternsPoints = GetPosotionDetectionPatternsPoints(mat_morphologyEx);
+        //    ///获取完整二维码
+        //    Mat warpaffinemat = WarpAffine(SrcRoi.Clone());
+        //    // SaveMatFile(warpaffinemat, "warpaffinemat");
+        //    ///图形预处理，方便查找定位点
+        //    Mat mat_morphologyEx = MatPreprocessing(warpaffinemat.Clone());
+        //    //查找二维码的三个定位点
+        //    List<RectPoints> PatternsPoints = GetPosotionDetectionPatternsPoints(mat_morphologyEx);
 
-            if (PatternsPoints.Count != 3)
-            {
-                response.Code = "502";
-                response.Message = "没有找到二维码定位点";
-                Log.Information($"没有找到二维码定位点");
-                return Task.CompletedTask;
-            }
-            //二维码方向矫正
-            Point2f center;
-            int rotationAngle = GetRotationAngle(PatternsPoints, out center);
-            Mat m = Cv2.GetRotationMatrix2D(center, rotationAngle, 1);
-            Mat dst = new Mat();
-            Cv2.WarpAffine(warpaffinemat, dst, m, dst.Size());
-            SaveMatFile(dst, $"矫正之后的原图");
+        //    if (PatternsPoints.Count != 3)
+        //    {
+        //        response.Code = "502";
+        //        response.Message = "没有找到二维码定位点";
+        //        Log.Information($"没有找到二维码定位点");
+        //        return Task.CompletedTask;
+        //    }
+        //    //二维码方向矫正
+        //    Point2f center;
+        //    int rotationAngle = GetRotationAngle(PatternsPoints, out center);
+        //    Mat m = Cv2.GetRotationMatrix2D(center, rotationAngle, 1);
+        //    Mat dst = new Mat();
+        //    Cv2.WarpAffine(warpaffinemat, dst, m, dst.Size());
+        //    SaveMatFile(dst, $"矫正之后的原图");
 
-            //获取指定的识别定位点
-            Log.Information($"成功找到二维码3个定位点：坐标:{PatternsPoints[0].CenterPoints.X},{PatternsPoints[0].CenterPoints.Y}--{PatternsPoints[1].CenterPoints.X},{PatternsPoints[1].CenterPoints.Y}--{PatternsPoints[2].CenterPoints.X},{PatternsPoints[2].CenterPoints.Y}");
-            using Mat Patterns = GetPosotionDetectionPatternsMat(dst, PatternsPoints);
+        //    //获取指定的识别定位点
+        //    Log.Information($"成功找到二维码3个定位点：坐标:{PatternsPoints[0].CenterPoints.X},{PatternsPoints[0].CenterPoints.Y}--{PatternsPoints[1].CenterPoints.X},{PatternsPoints[1].CenterPoints.Y}--{PatternsPoints[2].CenterPoints.X},{PatternsPoints[2].CenterPoints.Y}");
+        //    using Mat Patterns = GetPosotionDetectionPatternsMat(dst, PatternsPoints);
 
-            //图像转Base64编码
-            response.MarkImgData = Base64ToMat.ToBase64(Patterns);
-            response.Code = "200";
-            response.Message = "成功找到二维码锯齿定位点";
+        //    //图像转Base64编码
+        //    response.MarkImgData = Base64Expand.ToBase64(Patterns);
+        //    response.Code = "200";
+        //    response.Message = "成功找到二维码锯齿定位点";
 
-            Log.Information($"返回二维码右上角定位点图片base64");
-            SaveMatFile(Patterns, "Patterns");
+        //    Log.Information($"返回二维码右上角定位点图片base64");
+        //    SaveMatFile(Patterns, "Patterns");
 
-            //如果没有找到方块，则返回
-            return Task.CompletedTask;
-        }
+        //    //如果没有找到方块，则返回
+        //    return Task.CompletedTask;
+        //}
 
         /// <summary>
         /// 计算向量 两点之间的距离
@@ -284,7 +286,7 @@ namespace QrCodeWeb.Services
             //进行内核大小为7的 中值滤波
             using Mat MedianBlur = new Mat();
             Cv2.MedianBlur(GRAY_mat, MedianBlur, 1);
-            SaveMatFile(MedianBlur, "MedianBlur", filename);
+            //SaveMatFile(MedianBlur, "MedianBlur", filename);
 
             ///使用自适应阈值来二值化图像矩阵数据
             Mat srthreshold = new Mat();
@@ -292,7 +294,7 @@ namespace QrCodeWeb.Services
             // SaveMatFile(Threshold_mat, $"Threshold_Binary", filename);
             Cv2.AdaptiveThreshold(MedianBlur, srthreshold, 255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, 101, 5);
 
-            SaveMatFile(srthreshold, "自适应阈值二值化", filename);
+            //SaveMatFile(srthreshold, "自适应阈值二值化", filename);
 
             //Mat DST = new Mat();
             //Cv2.Normalize(MedianBlur, DST, 0, 255, NormTypes.MinMax, 1);
@@ -310,13 +312,13 @@ namespace QrCodeWeb.Services
             Mat MorphologyEx_Dilate = new Mat();
             Mat elementDilate = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(7, 7));
             Cv2.MorphologyEx(srthreshold, MorphologyEx_Dilate, MorphTypes.Dilate, elementDilate);
-            SaveMatFile(MorphologyEx_Dilate, "MorphologyEx_Open", filename);
+            //SaveMatFile(MorphologyEx_Dilate, "MorphologyEx_Open", filename);
 
             //腐蚀运算，使用3*3的矩形核
             Mat MorphologyEx_Erode = new Mat();
             Mat elementErode = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(3, 3));
             Cv2.MorphologyEx(MorphologyEx_Dilate, MorphologyEx_Erode, MorphTypes.Erode, elementErode);
-            SaveMatFile(MorphologyEx_Erode, "MorphologyEx_Erode", filename);
+            //SaveMatFile(MorphologyEx_Erode, "MorphologyEx_Erode", filename);
 
             //Mat Gradient = new Mat();
             //Mat elementGradient = Cv2.GetStructuringElement(MorphShapes.Cross, new Size(5, 5));
@@ -382,7 +384,7 @@ namespace QrCodeWeb.Services
                     //    SaveMatFile(drawingf, "逼近4的轮廓", name);
                     //}
                     Cv2.DrawContours(drawingAllContours, matcontours, i, new Scalar(255, 255, 255));
-                    SaveMatFile(drawingAllContours, "所有轮廓", name);
+                    //SaveMatFile(drawingAllContours, "所有轮廓", name);
                     #region
 
                     if (hierarchy[i].Child != -1 && ic == 0)
@@ -433,18 +435,13 @@ namespace QrCodeWeb.Services
                                 Cv2.DrawContours(drawingmarkminAreaSzie, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
                             }
                         }
-                        //else
-                        //{
-                        //    Cv2.DrawContours(drawing, matcontours, i, new Scalar(0, 125, 255), 4, LineTypes.Link8);
-                        //    SaveMatFile(drawing, "无法逼近的轮廓", name);
-                        //}
                         ic = 0;
                         parentIdx = -1;
                     }
                 }
-                SaveMatFile(drawingmark, "三个定位点轮廓", name);
-                SaveMatFile(drawingAllContours, "所有轮廓", name);
-                SaveMatFile(drawingmarkminAreaSzie, "三个定位点轮廓_小于指定面积", name);
+                //SaveMatFile(drawingmark, "三个定位点轮廓", name);
+                //SaveMatFile(drawingAllContours, "所有轮廓", name);
+                //SaveMatFile(drawingmarkminAreaSzie, "三个定位点轮廓_小于指定面积", name);
 
                 return rectPoints;
             }
@@ -478,7 +475,7 @@ namespace QrCodeWeb.Services
 
             Rect rect = new Rect(topx, topy, w, w);//取得11个模块宽度
             Mat roi = new Mat(mat, rect);
-            Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
+            // Log.Information($"根据二维码模块大小，截取右上角定位点11个模块宽度：宽{roi.Width},高{roi.Height}");
             return roi;
         }
 
@@ -687,31 +684,6 @@ namespace QrCodeWeb.Services
             //SaveMatFile(dst, "WarpAffine");
             //Log.Information($"计算二维码边界坐标顺序：完成，坐标顺序：{QRrect[0].X},{QRrect[0].Y};{QRrect[1].X},{QRrect[1].Y};{QRrect[2].X},{QRrect[2].Y};{QRrect[3].X},{QRrect[3].Y}");
             return RotationAngle;
-        }
-
-        private Task SaveMatFile(Mat array, string name, string s = "")
-        {
-            var filepathw = Path.Combine(Environment.ContentRootPath, $"testdata");
-            if (!Directory.Exists(filepathw))
-            {
-                Directory.CreateDirectory(filepathw);
-            }
-
-            var filepathw2 = Path.Combine(filepathw, $"{FileNmae}");
-
-            if (!Directory.Exists(filepathw2))
-            {
-                Directory.CreateDirectory(filepathw2);
-            }
-
-            var filepath = Path.Combine(filepathw2, $"{FileNmaeIdnex}_{name}.jpg");
-            // Mat image = array.GetMat();
-
-            //ImageEncodingParam param = new ImageEncodingParam(ImageEncodingFlags.);
-            array.SaveImage(filepath);
-
-            FileNmaeIdnex++;
-            return Task.CompletedTask;
         }
     }
 }
