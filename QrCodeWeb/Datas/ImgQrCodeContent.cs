@@ -53,6 +53,6 @@
         /// <summary>
         /// 档案图的路径
         /// </summary>
-        string? url { get; set; } = "";
+        public string? url { get; set; } = "";
     }
 }

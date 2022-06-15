@@ -42,6 +42,12 @@ namespace QrCodeWeb.Controllers
                     imgRecognitionMessage = "参数为空"
                 };
             }
+
+            if(str.url is not "")
+            {
+                Stream stream = GetImage(str.url);
+            }
+            
             var result = Serice.CutImage(str);
 
             return result;
