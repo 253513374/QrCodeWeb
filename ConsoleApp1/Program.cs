@@ -14,7 +14,7 @@ var path = Console.ReadLine();
 GetFiles(@"C:\Users\q4528\Desktop\测试数据\甄品保图像检测", ref files);
 
 int OK = 0;
-
+//xiugai 
 for (int i = 0; i < files.Count; i++)
 {
     DateTime date = DateTime.Now;
