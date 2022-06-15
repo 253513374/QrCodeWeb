@@ -45,7 +45,7 @@ namespace QrCodeWeb.Controllers
                 }
                 Logger.LogInformation($"接收到请求,Base64:{code.Substring(0, 100)}......");
 
-                Mat mat = Base64ToMat.ToaMat(code);
+                Mat mat = Base64Expand.ToaMat(code);
                 if (mat.Empty())
                 {
                     Logger.LogInformation($"base64转图片失败");

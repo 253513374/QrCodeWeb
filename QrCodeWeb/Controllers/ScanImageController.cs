@@ -31,7 +31,7 @@ namespace QrCodeWeb.Controllers
         {
             Logger.LogInformation($"ScanQrImg接收前端原图图");
             // Mat mat = new Mat(@"C:\Users\q4528\Desktop\测试数据\定位\3.jpg", ImreadModes.AnyColor);
-            return Serice.IsQrImg(imgBase64);
+            return Serice.SanCutImg(imgBase64);
         }
     }
 }

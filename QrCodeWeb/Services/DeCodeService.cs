@@ -246,7 +246,7 @@ namespace QrCodeWeb.Services
             using Mat Patterns = GetPosotionDetectionPatternsMat(dst, PatternsPoints);
 
             //图像转Base64编码
-            response.MarkImgData = Base64ToMat.ToBase64(Patterns);
+            response.MarkImgData = Base64Expand.ToBase64(Patterns);
             response.Code = "200";
             response.Message = "成功找到二维码锯齿定位点";
 

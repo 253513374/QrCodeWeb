@@ -48,5 +48,11 @@
         /// 需要切图的图片base
         /// </summary>
         public string CutedImgBase64Content { get; set; }
+
+
+        /// <summary>
+        /// 档案图的路径
+        /// </summary>
+        string? url { get; set; } = "";
     }
 }

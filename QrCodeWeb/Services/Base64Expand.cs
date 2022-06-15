@@ -1,34 +1,32 @@
 ﻿using OpenCvSharp;
-using QrCodeWeb.Datas;
 using System.Drawing;
 
 namespace QrCodeWeb.Services
 {
-    public class Base64ToMat
+    public class Base64Expand
     {
         public static Mat ToaMat(string base64)
         {
             try
             {
-                //  base64 = base64.Replace(" ", "+");
-                //   base64 = base64.Trim().Substring(base64.IndexOf(",") + 1);   //将‘，’以前的多余字符串删除
-
+                base64 = base64.Replace(" ", "+");
+                base64 = base64.Trim().Substring(base64.IndexOf(",") + 1);   //将‘，’以前的多余字符串删除
                 byte[] bytes = Convert.FromBase64String(base64);
 
-                // Mat m = Cv2.ImDecode(bytes, ImreadModes.Color);
-                //if (m.Empty())
-                //{
-                //    response.Message = "base64解码失败";
-                //    response.Code = "500";
-                //}
+                Mat m = Cv2.ImDecode(bytes, ImreadModes.Color);
+
+                if (m.Empty())
+                {
+                    return null;
+                }
                 // stream.Close();
-                return Cv2.ImDecode(bytes, ImreadModes.Color); ;
+                return m;
             }
             catch (Exception)
             {
                 //response.Message = "base64解码失败";
                 //response.Code = "50";
-                return new Mat();
+                return null;
                 //  throw;
             }
         }

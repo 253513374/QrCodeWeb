@@ -1,7 +1,5 @@
 using QrCodeWeb.Services;
 using Serilog;
-using Microsoft.AspNetCore.Hosting.Server;
-using System.Net;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -22,6 +20,7 @@ try
     builder.Host.UseSerilog((x, y) => y.WriteTo.Console().ReadFrom.Configuration(x.Configuration));
     // Add services to the container.
 
+    builder.Services.AddHttpClient();
     builder.Services.AddControllers();
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
@@ -29,7 +28,8 @@ try
 
     builder.Services.AddScoped<DeCodeService>();
     builder.Services.AddScoped<CutImageService>();
-
+    builder.Services.AddScoped<Uititys>();
+   
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
