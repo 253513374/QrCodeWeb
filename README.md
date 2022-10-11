@@ -120,9 +120,10 @@ cd  /productdata/qrcodedecoding/cmake/bin/
 3、按照模板填入编译参数，进行源码构建（编译参数有很多，感兴趣的可查找资料自行查看各个参数的说明）
 
 ```
- cmake -DOPENCV_EXTRA_MODULES_PATH=/productdata/qrcodedecoding/opencv/opencv_contrib-4.5.5/modules /productdata/qrcodedecoding/opencv/opencv-4.5.5/
+ cmake -D OPENCV_GENERATE_PKGCONFIG=ON  -D CMAKE_INSTALL_PREFIX=/usr/local -DOPENCV_EXTRA_MODULES_PATH=/productdata/QRcodeDecodingService/opencv_contrib-4.5.5/modules /productdata/QRcodeDecodingService/opencv-4.5.5
+ 
+  cmake -D OPENCV_GENERATE_PKGCONFIG=YES -DOPENCV_EXTRA_MODULES_PATH=/productdata/QRcodeDecodingService/opencv_contrib-4.6.0/modules  /productdata/QRcodeDecodingService/opencv-4.6.0
 ```
-
 
 2、以下命令 编译构建好的opencv 源码
 make -j5 
@@ -161,7 +162,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
 
 查看opencv是否安装成功：
 
-输入命令：pkg-config-cflags opencv
+输入命令：pkg-config-cflags opencv 或者 ubuntu:  pkg-config opencv -cflags
 
 ​         pkg-config-libs opencv  
 
@@ -171,11 +172,24 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
 
 ## 编译opencvsharp 
 
-下载opencvsharp 4 源码，cd 转到目录[OpenCvSharpExtern]。
+下载opencvsharp 4 源码，构建本机包装器`OpenCvSharpExtern`
+
+```ini
+cd opencvsharp/src
+mkdir build
+cd build
+cmake -D CMAKE_INSTALL_PREFIX=${YOUR_OPENCV_INSTALL_PATH} ..
+make -j 
+make install
+# 在linux 上运行，必须要对应的系统libOpenCvSharpExtern.so文件。这个文件的编译方式如下。
+#项目中引用NuGet中的OpenCvSharp4基础包，再添加各个系统的对应OpenCvSharpExtern包的引用。
+```
+
+cd 转到目录[OpenCvSharpExtern]。
 
 1、 使用cmake . 可以先检查文件（可选），
 
-2、使用make 命令 开始编译文件，
+2、使用make 命令 开始编译文件，make -j8
 
 3、编译完成：生成libOpenCvSharpExtern.so文件
 
@@ -242,7 +256,9 @@ ln -s /var/lib/dotnet/dotnet /usr/local/bin
 
 ### 3、使用kestrel部署
 
-程序启动命令：dotnet  QrCodeWeb.dll  --urls http://*:5000
+路径：/productdata/qrcodedecoding/publish  
+
+程序启动命令：dotnet  QrCodeWeb.dll  --urls http://*:5022 & disown
 
 [swagger ui](http://10.253.100.14:5000/swagger/index.html)
 
@@ -352,7 +368,7 @@ sudo systemctl stop  supervisord.service
 
 
 
-查看站点是否正常运行（查看程序进程是否运行）：ps -aux | grep  "QrCodeWeb.dll"
+**查看站点是否正常运行（查看程序进程是否运行）：ps -aux | grep  "QrCodeWeb.dll"**
 
 错误：
 
@@ -361,6 +377,28 @@ Error: Another program is already listening on a port that one of our HTTP serve
 解决办法
 
 卸载重装
+
+## 查看linux 日志记录
+
+循环实时查看最后1000行记录(最常用的)
+
+tail  -fn 10   /productdata/qrcodedecoding/publish/AbpMPA.out.log 
+
+tail  -fn 10   /productdata/qrcodedecoding/publish/AbpMPA.err.log 
+
+查看进程
+
+ps -aux | grep  "QrCodeWeb.dll"  查看进程状态
+
+根据进程 pid 查看进程详细信息（cpu,内存等资源占用信息）
+
+ top -d 1 -p pid
+
+如图：
+
+<img src="C:\Users\q4528\AppData\Roaming\Typora\typora-user-images\image-20220509090607276.png" alt="image-20220509090607276" style="zoom:33%;" />
+
+
 
 
 
